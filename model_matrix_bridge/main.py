@@ -17,7 +17,7 @@ LAT_SIZE = int(getenv("LAT_SIZE"))
 LON_SIZE = int(getenv("LON_SIZE"))
 MAX_AGE  = int(getenv("FS_MAX_DOC_AGE_DAYS"))
 
-URL_TEMPLATE = f"""{getenv("URL_BASE")}?lat_lo=%f&lon_lo=%f&lat_hi=%f&lon_hi=%f&lat_size={LAT_SIZE}&lon_size={LON_SIZE}&date=%s"""
+URL_TEMPLATE = f"""{getenv("URL_BASE")}?src=%s&lat_size={LAT_SIZE}&lon_size={LON_SIZE}&date=%s"""
 FS_CLIENT = firestore.Client()
 FS_COL = FS_CLIENT.collection(getenv("FS_COLLECTION"))
 
@@ -58,13 +58,11 @@ def getModelBoxes():
 
 
 def processRegion(region):
+    print(f"Procesing region: {region['qsrc']}")
     date_obj = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
     date_str = date_obj.strftime('%Y-%m-%dT%H:%M:%SZ')
     URL = URL_TEMPLATE % (
-        region['lat_lo'],
-        region['lon_lo'],
-        region['lat_hi'],
-        region['lon_hi'],
+        region['qsrc'],
         date_str
     )
 
@@ -72,26 +70,27 @@ def processRegion(region):
     
     resp = requests.get(URL)
     if resp.status_code == 200:
-        d = dict(resp.json())
-        
-        d = _reformat_2dlist(d)
-        d = _add_tags(d, region, date_obj)
-        logging.warning(d)
-        ret = FS_COL.document(f'{region["qsrc"]}_{date_str}').set(d)
-
+        final = dict()
+        data = dict(resp.json())
+        data = _reformat_2dlist(data)
+        final['data'] = data
+        final = _add_tags(final, region, date_obj)
+        ret = FS_COL.document(f'{region["qsrc"]}_{date_str}').set(final)
         return ret 
 
     else:
-        logging.warning("No data. resp: " + str(resp.status_code))
+        logging.warning("No data. resp: " + str(resp.status_code) + str(resp.text))
         return None 
 
 
 def removeOldDocuments():
+    print('removing old documents...')
     age = MAX_AGE
     date_threshold = datetime.datetime.utcnow() - datetime.timedelta(days=age)
     logging.warning('date threshold: ' + str(date_threshold))
     docs = FS_COL.where('date', '<=', date_threshold).stream()
     for doc in docs:
+        print(f"Removing: {doc.id}")
         FS_COL.document(doc.id).delete()
 
 
@@ -103,6 +102,8 @@ def main(data, context):
         context (google.cloud.functions.Context): Metadata for the event.
     """
 
+    removeOldDocuments()
+
     logging.warning("entered function")
     model_data = getModelBoxes()
     logging.warning(model_data)
@@ -110,7 +111,7 @@ def main(data, context):
         logging.warning(region['name'])
         processRegion(region)
 
-    removeOldDocuments()
+    
 
 
 
