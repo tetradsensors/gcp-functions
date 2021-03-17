@@ -1,9 +1,9 @@
 from datetime import datetime
 import pytz
 import numpy
-from tetrad import gaussian_model
-from tetrad import utils
-from tetrad.api_consts import *
+import gaussian_model
+import utils
+from api_consts import *
 import torch
 import statistics
 

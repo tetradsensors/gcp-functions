@@ -8,7 +8,7 @@ Here are the gcloud commands used to deploy the Function and Scheduler job:
 
 Deploy Scheduler Job:
 ```bash
-gcloud scheduler jobs create pubsub model_matrix_brige --schedule "*/15 * * * *" --topic trigger_estimates_model --message-body "PewPew"
+gcloud scheduler jobs create pubsub estimates_model --schedule "*/15 * * * *" --topic trigger_estimates_model --message-body "PewPew"
 ```
 Deploy Function:
 ```bash

@@ -1,33 +1,32 @@
 # from os import getenv
-# from datetime import datetime, timedelta
-# import dateutil
-# from dateutil import parser as dateutil_parser
+from datetime import datetime, timedelta
+import dateutil
+from dateutil import parser as dateutil_parser
 # from pytz import timezone
 from utm import from_latlon
 # from matplotlib.path import Path
-# from scipy import interpolate
-# from scipy.io import loadmat
+from scipy import interpolate
+from scipy.io import loadmat
 from csv import reader as csv_reader
-# import math 
+import math 
 # from flask import jsonify
-# import numpy as np
+import numpy as np
 # import re
-# from google.cloud import storage
-# import json
-# from tetrad.classes import ArgumentError
-# from tetrad.api_consts import *
-
+from google.cloud import storage
+import json
+from classes import ArgumentError
+from api_consts import *
 
 # DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S+0000"
 # BQ_DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
-# def getModelBoxes():
-#     gs_client = storage.Client()
-#     bucket = gs_client.get_bucket(getenv("GS_BUCKET"))
-#     blob = bucket.get_blob(getenv("GS_MODEL_BOXES"))
-#     model_data = json.loads(blob.download_as_string())
-#     return model_data
-# MODEL_BOXES = getModelBoxes()
+def getModelBoxes():
+    gs_client = storage.Client()
+    bucket = gs_client.get_bucket(getenv("GS_BUCKET"))
+    blob = bucket.get_blob(getenv("GS_MODEL_BOXES"))
+    model_data = json.loads(blob.download_as_string())
+    return model_data
+MODEL_BOXES = getModelBoxes()
 
 
 def getModelRegion(src):
@@ -50,15 +49,15 @@ def getModelRegion(src):
     return None
             
 
-# def parseDatetimeString(datetime_string:str):
-#     """Parse date string into a datetime object"""
+def parseDatetimeString(datetime_string:str):
+    """Parse date string into a datetime object"""
     
-#     datetime_obj = dateutil_parser.parse(datetime_string, yearfirst=True, dayfirst=False)
+    datetime_obj = dateutil_parser.parse(datetime_string, yearfirst=True, dayfirst=False)
     
-#     # If user didn't specify a timezone, assume they meant UTC. Re-parse using UTC timezone.
-#     if datetime_obj.tzinfo is None:
-#         datetime_obj = datetime_obj.replace(tzinfo=dateutil.tz.UTC)
-#     return datetime_obj
+    # If user didn't specify a timezone, assume they meant UTC. Re-parse using UTC timezone.
+    if datetime_obj.tzinfo is None:
+        datetime_obj = datetime_obj.replace(tzinfo=dateutil.tz.UTC)
+    return datetime_obj
 
 
 # # def datetimeToBigQueryTimestamp(date):
@@ -84,17 +83,17 @@ def getModelRegion(src):
 #     return elevInterps
 
 
-# def setupElevationInterpolatorForSource(src):
-#     print('setupElevationInterpolatorForSource')
+def setupElevationInterpolatorForSource(src):
+    # print('setupElevationInterpolatorForSource')
     
-#     if src in ELEV_MAPS:
-#         data = loadmat(ELEV_MAPS[src])
-#         elevs_grid = data['elevs']
-#         lats_arr = data['lats']
-#         lons_arr = data['lons']
-#         return interpolate.interp2d(lons_arr, lats_arr, elevs_grid, kind='cubic')
-#     else:
-#         return None
+    if src in ELEV_MAPS:
+        data = loadmat(ELEV_MAPS[src])
+        elevs_grid = data['elevs']
+        lats_arr = data['lats']
+        lons_arr = data['lons']
+        return interpolate.interp2d(lons_arr, lats_arr, elevs_grid, kind='cubic')
+    else:
+        return None
 
 
 # def loadBoundingBox():
@@ -122,127 +121,127 @@ def getModelRegion(src):
 #         return correction_factors
 
 
-# def applyCorrectionFactor(factors, data_timestamp, data):
-#     for factor in factors:
-#         factor_start = factor['start_date']
-#         factor_end = factor['end_date']
-#         if factor_start <= data_timestamp and factor_end > data_timestamp:
-#             return max(0, data * factor['3003_slope'] + factor['3003_intercept'])
-#     print('\nNo correction factor found for ', data_timestamp)
-#     return data
+def applyCorrectionFactor(factors, data_timestamp, data):
+    for factor in factors:
+        factor_start = factor['start_date']
+        factor_end = factor['end_date']
+        if factor_start <= data_timestamp and factor_end > data_timestamp:
+            return max(0, data * factor['3003_slope'] + factor['3003_intercept'])
+    print('\nNo correction factor found for ', data_timestamp)
+    return data
 
 
-# def applyCorrectionFactorsToList(data_list, pm25_key=None):
-#     """Apply correction factors (in place) to PM2.5 data in data_list"""
+def applyCorrectionFactorsToList(data_list, pm25_key=None):
+    """Apply correction factors (in place) to PM2.5 data in data_list"""
     
-#     # Open the file and get correction factors
-#     with open(getenv("CORRECTION_FACTORS_FILENAME")) as csv_file:
-#         read_csv = csv_reader(csv_file, delimiter=',')
-#         rows = [row for row in read_csv]
-#         header = rows[0]
-#         rows = rows[1:]
-#         correction_factors = []
-#         for row in rows:
-#             rowDict = {name: elem for elem, name in zip(row, header)}
-#             rowDict['start_date'] = parseDatetimeString(rowDict['start_date'])
-#             rowDict['end_date'] = parseDatetimeString(rowDict['end_date'])
-#             rowDict['3003_slope'] = float(rowDict['3003_slope'])
-#             rowDict['3003_intercept'] = float(rowDict['3003_intercept'])
-#             correction_factors.append(rowDict)
+    # Open the file and get correction factors
+    with open(getenv("CORRECTION_FACTORS_FILENAME")) as csv_file:
+        read_csv = csv_reader(csv_file, delimiter=',')
+        rows = [row for row in read_csv]
+        header = rows[0]
+        rows = rows[1:]
+        correction_factors = []
+        for row in rows:
+            rowDict = {name: elem for elem, name in zip(row, header)}
+            rowDict['start_date'] = parseDatetimeString(rowDict['start_date'])
+            rowDict['end_date'] = parseDatetimeString(rowDict['end_date'])
+            rowDict['3003_slope'] = float(rowDict['3003_slope'])
+            rowDict['3003_intercept'] = float(rowDict['3003_intercept'])
+            correction_factors.append(rowDict)
         
-#     # Apply the correction factors to the PM2.5 data
-#     for datum in data_list:
-#         try:
-#             datum[pm25_key] = applyCorrectionFactor(correction_factors, datum['Timestamp'], datum[pm25_key])
-#         except: # Only try once. We just assume it isn't there if the first row doesn't have it
-#             return data_list
-#         # found = False
-#         # for factor in correction_factors:
-#         #     factor_start = factor['start_date']
-#         #     factor_end = factor['end_date']
-#         #     if factor_start <= datum['Timestamp'] < factor_end:
-#         #         datum['PM2_5'] = datum['PM2_5'] * factor['3003_slope'] + factor['3003_intercept']
-#         #         found = True
-#         #         break
-#         # if not found:
-#         #     print('\nNo correction factor found for ', datum['Timestamp'])
-#     return data_list
+    # Apply the correction factors to the PM2.5 data
+    for datum in data_list:
+        try:
+            datum[pm25_key] = applyCorrectionFactor(correction_factors, datum['Timestamp'], datum[pm25_key])
+        except: # Only try once. We just assume it isn't there if the first row doesn't have it
+            return data_list
+        # found = False
+        # for factor in correction_factors:
+        #     factor_start = factor['start_date']
+        #     factor_end = factor['end_date']
+        #     if factor_start <= datum['Timestamp'] < factor_end:
+        #         datum['PM2_5'] = datum['PM2_5'] * factor['3003_slope'] + factor['3003_intercept']
+        #         found = True
+        #         break
+        # if not found:
+        #     print('\nNo correction factor found for ', datum['Timestamp'])
+    return data_list
 
 
-# def _tuneData(data:list, pm25_key=None, temp_key=None, hum_key=None, removeNulls=False):
-#     """ Clean data and apply correction factors """
-#     # Open the file and get correction factors
-#     if pm25_key:
-#         with open(getenv("CORRECTION_FACTORS_FILENAME")) as csv_file:
-#             read_csv = csv_reader(csv_file, delimiter=',')
-#             rows = [row for row in read_csv]
-#             header = rows[0]
-#             rows = rows[1:]
-#             correction_factors = []
-#             for row in rows:
-#                 rowDict = {name: elem for elem, name in zip(row, header)}
-#                 rowDict['start_date'] = parseDatetimeString(rowDict['start_date'])
-#                 rowDict['end_date'] = parseDatetimeString(rowDict['end_date'])
-#                 rowDict['3003_slope'] = float(rowDict['3003_slope'])
-#                 rowDict['3003_intercept'] = float(rowDict['3003_intercept'])
-#                 correction_factors.append(rowDict)
+def _tuneData(data:list, pm25_key=None, temp_key=None, hum_key=None, removeNulls=False):
+    """ Clean data and apply correction factors """
+    # Open the file and get correction factors
+    if pm25_key:
+        with open(getenv("CORRECTION_FACTORS_FILENAME")) as csv_file:
+            read_csv = csv_reader(csv_file, delimiter=',')
+            rows = [row for row in read_csv]
+            header = rows[0]
+            rows = rows[1:]
+            correction_factors = []
+            for row in rows:
+                rowDict = {name: elem for elem, name in zip(row, header)}
+                rowDict['start_date'] = parseDatetimeString(rowDict['start_date'])
+                rowDict['end_date'] = parseDatetimeString(rowDict['end_date'])
+                rowDict['3003_slope'] = float(rowDict['3003_slope'])
+                rowDict['3003_intercept'] = float(rowDict['3003_intercept'])
+                correction_factors.append(rowDict)
         
-#     goodPM, goodTemp, goodHum = True, True, True
-#     for datum in data:
-#         if pm25_key and goodPM:
-#             try:
-#                 if (datum[pm25_key] == getenv("PM_BAD_FLAG")) or (datum[pm25_key] >= getenv("PM_BAD_THRESH")):
-#                     datum[pm25_key] = None
-#                 else:
-#                     datum[pm25_key] = applyCorrectionFactor(correction_factors, datum['Timestamp'], datum[pm25_key])
-#             except:
-#                 goodPM = False
+    goodPM, goodTemp, goodHum = True, True, True
+    for datum in data:
+        if pm25_key and goodPM:
+            try:
+                if (datum[pm25_key] == getenv("PM_BAD_FLAG")) or (datum[pm25_key] >= getenv("PM_BAD_THRESH")):
+                    datum[pm25_key] = None
+                else:
+                    datum[pm25_key] = applyCorrectionFactor(correction_factors, datum['Timestamp'], datum[pm25_key])
+            except:
+                goodPM = False
 
-#         if temp_key and goodTemp:
-#             try:
-#                 if datum[temp_key] == getenv("TEMP_BAD_FLAG"):
-#                     datum[temp_key] = None 
-#             except:
-#                 goodTemp = False
+        if temp_key and goodTemp:
+            try:
+                if datum[temp_key] == getenv("TEMP_BAD_FLAG"):
+                    datum[temp_key] = None 
+            except:
+                goodTemp = False
 
-#         if hum_key and goodHum:
-#             try:
-#                 if datum[hum_key] == getenv("HUM_BAD_FLAG"):
-#                     datum[hum_key] = None 
-#             except:
-#                 goodHum = False
+        if hum_key and goodHum:
+            try:
+                if datum[hum_key] == getenv("HUM_BAD_FLAG"):
+                    datum[hum_key] = None 
+            except:
+                goodHum = False
     
-#     if removeNulls:
+    if removeNulls:
 
-#         # If True, remove all rows with Null data
-#         if isinstance(removeNulls, bool):
-#             len_before = len(data)
-#             data = [datum for datum in data if all(datum.values())]
-#             len_after = len(data)
-#             print(f"removeNulls=True. Removed {len_before - len_after} rows. [{len_before} -> {len_after}]")
+        # If True, remove all rows with Null data
+        if isinstance(removeNulls, bool):
+            len_before = len(data)
+            data = [datum for datum in data if all(datum.values())]
+            len_after = len(data)
+            print(f"removeNulls=True. Removed {len_before - len_after} rows. [{len_before} -> {len_after}]")
         
-#         # If it's a list, remove the rows missing data listed in removeNulls list        
-#         elif isinstance(removeNulls, list):
-#             if verifyFields(removeNulls):
-#                 # Make sure each of the fields specified by removeNulls is in the row. 
-#                 data = [datum for datum in data if all([datum[field] for field in removeNulls])]
-#             else:
-#                 raise ArgumentError(f"(Internal error): removeNulls bad field name: {removeNulls}", 500)
+        # If it's a list, remove the rows missing data listed in removeNulls list        
+        elif isinstance(removeNulls, list):
+            if verifyFields(removeNulls):
+                # Make sure each of the fields specified by removeNulls is in the row. 
+                data = [datum for datum in data if all([datum[field] for field in removeNulls])]
+            else:
+                raise ArgumentError(f"(Internal error): removeNulls bad field name: {removeNulls}", 500)
         
-#         else:
-#             raise ArgumentError(f"(Internal error): removeNulls must be bool or list, but was: {type(removeNulls)}", 500)
+        else:
+            raise ArgumentError(f"(Internal error): removeNulls must be bool or list, but was: {type(removeNulls)}", 500)
 
-#     return data
+    return data
         
 
-# def tuneAllFields(data, fields, removeNulls=False):
-#     return _tuneData(
-#             data,
-#             pm25_key=(FIELD_MAP["PM2_5"] if "PM2_5" in fields else None),
-#             temp_key=(FIELD_MAP["TEMPERATURE"] if "TEMPERATURE" in fields else None),
-#             hum_key=(FIELD_MAP["HUMIDITY"] if "HUMIDITY" in fields else None),
-#             removeNulls=removeNulls,
-#     )
+def tuneAllFields(data, fields, removeNulls=False):
+    return _tuneData(
+            data,
+            pm25_key=(FIELD_MAP["PM2_5"] if "PM2_5" in fields else None),
+            temp_key=(FIELD_MAP["TEMPERATURE"] if "TEMPERATURE" in fields else None),
+            hum_key=(FIELD_MAP["HUMIDITY"] if "HUMIDITY" in fields else None),
+            removeNulls=removeNulls,
+    )
 
 
 def loadLengthScales():
@@ -371,11 +370,11 @@ def getScalesInTimeRange(scales, start_time, end_time):
 
 #     return query_dates
 
-# def interpolateQueryLocations(lat_lo, lat_hi, lon_lo, lon_hi, lat_size, lon_size):
-#     lat_vector = np.linspace(lat_lo, lat_hi, lat_size)
-#     lon_vector = np.linspace(lon_lo, lon_hi, lon_size)
+def interpolateQueryLocations(lat_lo, lat_hi, lon_lo, lon_hi, lat_size, lon_size):
+    lat_vector = np.linspace(lat_lo, lat_hi, lat_size)
+    lon_vector = np.linspace(lon_lo, lon_hi, lon_size)
 
-#     return lon_vector, lat_vector
+    return lon_vector, lat_vector
 
 
 def latlonToUTM(lat, lon):
@@ -383,40 +382,44 @@ def latlonToUTM(lat, lon):
 
 
 # # TODO: Rename
-# def convertLatLonToUTM(sensor_data):
-#     for datum in sensor_data:
-#         datum['utm_x'], datum['utm_y'], datum['zone_num'], _ = latlonToUTM(datum['Latitude'], datum['Longitude'])
-#     return sensor_data
+def convertLatLonToUTM(sensor_data):
+    for datum in sensor_data:
+        datum['utm_x'], datum['utm_y'], datum['zone_num'], _ = latlonToUTM(datum['Latitude'], datum['Longitude'])
+    return sensor_data
 
 def convertRadiusToBBox(r, c):
-    N = c[0] + r
-    S = c[0] - r 
-    E = c[1] + r
-    W = c[1] - r
+    '''
+    Latitude:  1 deg = 110.54 km
+    Longitude: 1 deg = 111.320*cos(latitude) km
+    '''
+    N = c[0] + (r / 110540)
+    S = c[0] - (r / 110540)
+    E = c[1] + (r / (111320 * math.cos(math.radians(c[0]))))
+    W = c[1] - (r / (111320 * math.cos(math.radians(c[0]))))
     return [N, S, E, W]
 
 
-# # https://www.movable-type.co.uk/scripts/latlong.html
-# def distBetweenCoords(p1, p2):
-#     """
-#     Get the Great Circle Distance between two
-#     GPS coordinates, in kilometers
-#     """
-#     R = 6371
-#     phi1 = p1[0] * (math.pi / 180)
-#     phi2 = p2[0] * (math.pi / 180)
-#     del1 = (p2[0] - p1[0]) * (math.pi / 180)
-#     del2 = (p2[1] - p1[1]) * (math.pi / 180)
+# https://www.movable-type.co.uk/scripts/latlong.html
+def distBetweenCoords(p1, p2):
+    """
+    Get the Great Circle Distance between two
+    GPS coordinates, in kilometers
+    """
+    R = 6371
+    phi1 = p1[0] * (math.pi / 180)
+    phi2 = p2[0] * (math.pi / 180)
+    del1 = (p2[0] - p1[0]) * (math.pi / 180)
+    del2 = (p2[1] - p1[1]) * (math.pi / 180)
     
-#     a = math.sin(del1 / 2) * math.sin(del1 / 2) +   \
-#         math.cos(phi1) * math.cos(phi2) *           \
-#         math.sin(del2 / 2) * math.sin(del2 / 2)
-#     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-#     d = R * c 
-#     return d
+    a = math.sin(del1 / 2) * math.sin(del1 / 2) +   \
+        math.cos(phi1) * math.cos(phi2) *           \
+        math.sin(del2 / 2) * math.sin(del2 / 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    d = R * c 
+    return d
 
-# def coordsInCircle(coords, radius, center):
-#     return distBetweenCoords(coords, center) <= radius
+def coordsInCircle(coords, radius, center):
+    return distBetweenCoords(coords, center) <= radius
 
 
 def bboxDataToRadiusData(data, radius, center):
@@ -487,12 +490,12 @@ def bboxDataToRadiusData(data, radius, center):
 #     return all(map(verifyDeviceString, devices))
 
 
-# def verifySources(srcs:list):
-#     return set(srcs).issubset(SRC_MAP)
+def verifySources(srcs:list):
+    return set(srcs).issubset(SRC_MAP)
 
 
-# def verifyFields(fields:list):
-#     return set(fields).issubset(FIELD_MAP)
+def verifyFields(fields:list):
+    return set(fields).issubset(FIELD_MAP)
 
 
 # def verifyRequiredArgs(request_args, required_args):
@@ -532,37 +535,37 @@ def bboxDataToRadiusData(data, radius, center):
 #     return lon
 
 
-# def argParseSources(srcs, single_source=False):
-#     '''
-#     Parse a 'src' argument from request.args.get('src')
-#     into a list of sources
-#     '''
+def argParseSources(srcs, single_source=False):
+    '''
+    Parse a 'src' argument from request.args.get('src')
+    into a list of sources
+    '''
 
-#     if ',' in srcs:
+    if ',' in srcs:
         
-#         if single_source:
-#             raise ArgumentError(f"Argument 'src' must be one included from: {', '.join(SRC_MAP)}", 400)
+        if single_source:
+            raise ArgumentError(f"Argument 'src' must be one included from: {', '.join(SRC_MAP)}", 400)
 
-#         srcs = [s.upper() for s in srcs.split(',')]
-#     else:
-#         srcs = [srcs.upper()]
+        srcs = [s.upper() for s in srcs.split(',')]
+    else:
+        srcs = [srcs.upper()]
     
-#     if len(srcs) > 1 and "ALL" in srcs:
-#         return "Argument list cannot contain 'ALL' and other sources", 400
-#     if len(srcs) > 1 and "ALLGPS" in srcs:
-#         return "Argument list cannot contain 'ALLGPS' and other sources", 400
+    if len(srcs) > 1 and "ALL" in srcs:
+        return "Argument list cannot contain 'ALL' and other sources", 400
+    if len(srcs) > 1 and "ALLGPS" in srcs:
+        return "Argument list cannot contain 'ALLGPS' and other sources", 400
     
-#     if "ALLGPS" in srcs:
-#         srcs = list(ALLGPS_TBLS)
+    if "ALLGPS" in srcs:
+        srcs = list(ALLGPS_TBLS)
 
-#     # Check src[s] for validity
-#     if not verifySources(srcs):
-#         raise ArgumentError(f"Argument 'src' must be included from one or more of {', '.join(SRC_MAP)}", 400)
+    # Check src[s] for validity
+    if not verifySources(srcs):
+        raise ArgumentError(f"Argument 'src' must be included from one or more of {', '.join(SRC_MAP)}", 400)
     
-#     if single_source:
-#         return srcs[0]
-#     else:
-#         return srcs
+    if single_source:
+        return srcs[0]
+    else:
+        return srcs
 
 
 # def argParseFields(fields):
@@ -592,11 +595,11 @@ def bboxDataToRadiusData(data, radius, center):
 #     return devices
 
 
-# def argParseDatetime(datetime_str:str):
-#     try:
-#         return parseDatetimeString(datetime_str)
-#     except dateutil_parser.ParserError:
-#         raise ArgumentError(f'Invalid datetime format. Correct format is: "{DATETIME_FORMAT}". For URL encoded strings, a (+) must be replaced with (%2B). See https://www.w3schools.com/tags/ref_urlencode.ASP for all character encodings.', status_code=400)
+def argParseDatetime(datetime_str:str):
+    try:
+        return parseDatetimeString(datetime_str)
+    except dateutil_parser.ParserError:
+        raise ArgumentError(f'Invalid datetime format. Correct format is: "{DATETIME_FORMAT}". For URL encoded strings, a (+) must be replaced with (%2B). See https://www.w3schools.com/tags/ref_urlencode.ASP for all character encodings.', status_code=400)
 
 
 # def argParseBBox(bbox:str):
@@ -664,17 +667,17 @@ def queryBuildFields(fields):
     return q_fields
 
 
-# def queryBuildSources(srcs, query_template):
-#     """
-#     turns a list of bigquery table names and a query
-#     template into a union of the queries across the sources
-#     """
-#     if srcs[0] == "ALL":
-#         tbl_union = query_template % ('*')
-#     elif len(srcs) == 1:
-#         tbl_union = query_template % (SRC_MAP[srcs[0]])
-#     else:
-#         tbl_union = '(' + ' UNION ALL '.join([query_template % (SRC_MAP[s]) for s in srcs]) + ')'
+def queryBuildSources(srcs, query_template):
+    """
+    turns a list of bigquery table names and a query
+    template into a union of the queries across the sources
+    """
+    if srcs[0] == "ALL":
+        tbl_union = query_template % ('*')
+    elif len(srcs) == 1:
+        tbl_union = query_template % (SRC_MAP[srcs[0]])
+    else:
+        tbl_union = '(' + ' UNION ALL '.join([query_template % (SRC_MAP[s]) for s in srcs]) + ')'
     
-#     return tbl_union
+    return tbl_union
 
