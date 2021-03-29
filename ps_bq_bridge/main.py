@@ -11,6 +11,7 @@ import traceback
 from datetime import datetime
 from google.cloud import firestore, storage, bigquery 
 from google.api_core import retry
+import geojson
 import pytz
 
 bq = bigquery.Client()
@@ -80,7 +81,7 @@ def addToFirestore(mac, table):
         })
 
 
-def ps_bq_bridge(event, context):
+def main(event, context):
     if 'data' in event:
         try:
             _insert_into_bigquery(event, context)
@@ -97,7 +98,7 @@ def _insert_into_bigquery(event, context):
      
     row[getenv("FIELD_ID")] = deviceId
 
-    # Uploads from SD card send a timestamp, normal messages do not
+    # Uploads from SD card send a timestamp, normal messages may not
     if getenv("FIELD_TS") not in row:
         row[getenv("FIELD_TS")] = context.timestamp
 
@@ -109,16 +110,26 @@ def _insert_into_bigquery(event, context):
                 if k == getenv("FIELD_NOX"):
                     row[getenv("FIELD_HTR")] = None
 
+    print('row:', row)
+
     # Use GPS to get the correct table         
     table_name = pointToTableName((row[getenv("FIELD_LAT")], row[getenv("FIELD_LON")]))
 
     # Update GPS coordinates (so we aren't storing erroneous 0.0's in database)
     if not sum([row[getenv("FIELD_LAT")], row[getenv("FIELD_LON")]]):
-        row[getenv("FIELD_LAT")] = None
-        row[getenv("FIELD_LON")] = None
+        row[getenv("FIELD_GPS")] = None
+    else:
+        geo = geojson.Point((row[getenv('FIELD_LON')], row[getenv('FIELD_LAT')]))
+        row[getenv("FIELD_GPS")] = geojson.dumps(geo)
+    
+    # Remove Lat/Lon
+    row.pop(getenv('FIELD_LAT'), None)
+    row.pop(getenv('FIELD_LON'), None)
+
+    row[getenv('FIELD_LABEL')] = table_name
 
     # Add the entry to the appropriate BigQuery Table
-    table = bq.dataset(getenv('BQ_DATASET_TELEMETRY')).table(table_name)
+    table = bq.dataset(getenv('BQ_DATASET_TELEMETRY')).table(getenv('BQ_TABLE'))
     errors = bq.insert_rows_json(table,
                                  json_rows=[row],)
                                 #  retry=retry.Retry(deadline=30))
@@ -126,7 +137,7 @@ def _insert_into_bigquery(event, context):
         raise BigQueryError(errors)
 
     # (If no insert errors) Update FireStore entry for MAC address
-    addToFirestore(deviceId, table_name)
+    # addToFirestore(deviceId, table_name)
 
 
 def _handle_success(deviceID):
