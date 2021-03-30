@@ -46,6 +46,8 @@ def main(data, context):
         AND 
         Latitude != 0
     """
+    
+    geo = geojson.Point((row[getenv('FIELD_LON')], row[getenv('FIELD_LAT')]))
 
     client = Client()
     target_table = client.dataset(getenv("BQ_DATASET")).table(getenv("BQ_TABLE"))
