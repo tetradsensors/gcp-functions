@@ -13,7 +13,7 @@ def main(data, context):
     SELECT
         time AS Timestamp, 
         ID AS DeviceID,
-        ST_GEOGPOINT(Longitude, Latitude) GPS
+        ST_GEOGPOINT(Longitude, Latitude) GPS,
         Altitude AS Elevation,
         CASE 
             WHEN PM1 = -1 THEN NULL
@@ -28,16 +28,16 @@ def main(data, context):
             ELSE PM10
         END PM10,
         CASE 
-            WHEN Temperature = -1 THEN NULL
+            WHEN Temperature = -1000 THEN NULL
             ELSE Temperature
         END Temperature, 
         CASE 
-            WHEN Humidity = -1 THEN NULL
+            WHEN Humidity = -1000 THEN NULL
             ELSE Humidity
         END Humidity,
         `CO` AS MicsRED,
         `NO` AS MicsNOX,
-        MICS AS MicsHeater
+        MICS AS MicsHeater,
         "AQ&U" AS Source,
         "{getenv('FIELD_LABEL')}" AS Label
     FROM 
