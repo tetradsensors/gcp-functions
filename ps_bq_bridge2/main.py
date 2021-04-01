@@ -127,6 +127,7 @@ def _insert_into_bigquery(event, context):
     row.pop(getenv('FIELD_LON'), None)
 
     row[getenv('FIELD_LABEL')] = table_name
+    row[getenv('FIELD_SRC')] = 'Tetrad'
 
     # Add the entry to the appropriate BigQuery Table
     table = bq.dataset(getenv('BQ_DATASET_TELEMETRY')).table(getenv('BQ_TABLE'))
