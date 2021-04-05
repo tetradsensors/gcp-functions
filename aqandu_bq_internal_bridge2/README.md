@@ -13,5 +13,5 @@ gcloud scheduler jobs create pubsub aqandu_bq_internal_bridge2 --schedule "*/2 *
 ```
 Deploy Function:
 ```bash
-gcloud functions deploy aqandu_bq_internal_bridge2 --entry-point main --runtime python38 --trigger-resource trigger_aqandu_bq_internal_bridge2 --trigger-event google.pubsub.topic.publish --timeout 540s --env-vars-file .env.yaml
+gcloud functions deploy aqandu_bq_internal_bridge2 --entry-point main --runtime python38 --trigger-resource trigger_aqandu_bq_internal_bridge2 --trigger-event google.pubsub.topic.publish --timeout 20s --env-vars-file .env.yaml
 ```

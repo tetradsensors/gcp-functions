@@ -14,7 +14,7 @@ from google.api_core import retry
 import geojson
 import pytz
 
-bq = bigquery.Client()
+bq_client = bigquery.Client()
 
 METRIC_ERROR_MAP = {
     getenv("FIELD_ELE"):    0,
@@ -27,12 +27,68 @@ METRIC_ERROR_MAP = {
     getenv("FIELD_NOX"):    10000,
 }
 
+# Keep these global so they are persistant across invocations
+gs_client = storage.Client()
+bucket = gs_client.get_bucket(getenv("GS_BUCKET"))
+blob = bucket.get_blob(getenv("GS_MODEL_BOXES"))
+model_data = json.loads(blob.download_as_string())
+
+logged_devices = set()
+
+fs_client = firestore.Client()
+
 def getModelBoxes():
-    gs_client = storage.Client()
-    bucket = gs_client.get_bucket(getenv("GS_BUCKET"))
-    blob = bucket.get_blob(getenv("GS_MODEL_BOXES"))
-    model_data = json.loads(blob.download_as_string())
     return model_data
+
+ 
+def getLoggedDevices():
+    global logged_devices
+    if not logged_devices:
+        query = f"""
+        SELECT
+            DeviceID
+        FROM
+            `meta.devices`
+        WHERE
+            Source = "Tetrad"
+        """
+        job = bq_client.query(query)
+        results = job.result()
+        logged_devices = logged_devices.union(set([dict(r)['DeviceID'] for r in results]))
+
+
+def addNewDevicesToBigQuery(new_devices:set):
+    if new_devices:
+        rows = [{'DeviceID': dev, 'Source': "Tetrad"} for dev in new_devices]
+        row_ids = [r['DeviceID'] for r in rows]
+        target_table = bq_client.dataset('meta').table('devices')
+        errors = bq_client.insert_rows_json(
+            table=target_table,
+            json_rows=rows,
+            row_ids=row_ids,
+        )
+        if errors:
+            print(errors)
+            return False
+        else:
+            return True
+
+
+def addNewDevices(devices_this_call:set):
+    global logged_devices
+
+    # Update our list of (global) logged_devices if necessary
+    getLoggedDevices()
+
+    # Figure out which devices from this invocation have never been seen by our DB
+    new_devices = devices_this_call - logged_devices
+
+    # Add new devices to our meta.devices table
+    if addNewDevicesToBigQuery(new_devices):
+        
+        # Add new devices to (global) logged_devices
+        logged_devices = logged_devices.union(new_devices)
+
 
 # http://www.eecs.umich.edu/courses/eecs380/HANDOUTS/PROJ2/InsidePoly.html
 def inPoly(p, poly):
@@ -66,19 +122,19 @@ def pointToTableName(p):
             (box['lat_hi'], box['lon_lo']) 
         ]
         if inPoly(p, poly):
-            logging.info(f"Adding point {p} for bounding box {poly} to table {box['table']}")
+            # print(f"Adding point {p} for bounding box {poly} to table {box['table']}")
             return box['table']
-    logging.info(f"Adding point {p} to table {getenv('BQ_TABLE_GLOBAL')}")
+    # print(f"Adding point {p} to table {getenv('BQ_TABLE_GLOBAL')}")
     return getenv('BQ_TABLE_GLOBAL')
 
 
-def addToFirestore(mac, table):
-    fs_client = firestore.Client()
-    doc_ref = fs_client.collection(getenv("FS_COL")).document(mac)
-    if doc_ref.get().exists:
-        doc_ref.update({
-            getenv('FS_FIELD_LAST_BQ_TABLE'): table
-        })
+# def addToFirestore(mac, table):
+#     fs_col = fs_client.collection('devices')
+#     doc_ref = fs_col.document(mac)
+#     if doc_ref.get().exists:
+#         doc_ref.update({
+#             getenv('FS_FIELD_LAST_BQ_TABLE'): table
+#         })
 
 
 def main(event, context):
@@ -110,8 +166,6 @@ def _insert_into_bigquery(event, context):
                 if k == getenv("FIELD_NOX"):
                     row[getenv("FIELD_HTR")] = None
 
-    print('row:', row)
-
     # Use GPS to get the correct table         
     table_name = pointToTableName((row[getenv("FIELD_LAT")], row[getenv("FIELD_LON")]))
 
@@ -130,20 +184,26 @@ def _insert_into_bigquery(event, context):
     row[getenv('FIELD_SRC')] = 'Tetrad'
 
     # Add the entry to the appropriate BigQuery Table
-    table = bq.dataset(getenv('BQ_DATASET_TELEMETRY')).table(getenv('BQ_TABLE'))
-    errors = bq.insert_rows_json(table,
+    table = bq_client.dataset(getenv('BQ_DATASET_TELEMETRY')).table(getenv('BQ_TABLE'))
+    errors = bq_client.insert_rows_json(table,
                                  json_rows=[row],)
                                 #  retry=retry.Retry(deadline=30))
     if errors != []:
         raise BigQueryError(errors)
 
-    # (If no insert errors) Update FireStore entry for MAC address
+    # (If no insert errors): 
+    # Update FireStore entry for MAC address
     # addToFirestore(deviceId, table_name)
+
+    # Add device to meta.devices
+    addNewDevices(set([row[getenv("FIELD_ID")]]))
+
+
 
 
 def _handle_success(deviceID):
     message = 'Device \'%s\' streamed into BigQuery' % deviceID
-    logging.info(message)
+    # logging.info(message)
 
 
 def _handle_error(event):
