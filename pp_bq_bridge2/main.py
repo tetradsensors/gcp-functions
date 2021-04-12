@@ -98,7 +98,7 @@ def main(data, context):
     df['GPS'] = df.apply(lambda x: geojson.dumps(geojson.Point((x['Lon'], x['Lat']))), axis=1)
 
     # Filter out bad PM:
-    df.loc[df['PM2_5Value'] > 500, 'PM2_5Value'] = np.nan
+    df.loc[df['PM2_5Value'] >= 500, 'PM2_5Value'] = np.nan
 
     # Convert temperature F to C
     df['temp_f'] = (df['temp_f'] - 32) * (5. / 9)

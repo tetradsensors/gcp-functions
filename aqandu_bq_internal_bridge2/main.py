@@ -68,16 +68,23 @@ def main(data, context):
         Altitude AS Elevation,
         CASE 
             WHEN PM1 = -1 THEN NULL
+            WHEN PM1 >= {getenv('PM_BAD_THRESH')} THEN NULL
             ELSE PM1
         END PM1,
         CASE 
             WHEN PM2_5 = -1 THEN NULL
+            WHEN PM2_5 >= {getenv('PM_BAD_THRESH')} THEN NULL
             ELSE PM2_5
         END PM2_5,
         CASE 
             WHEN PM10 = -1 THEN NULL
+            WHEN PM10 >= {getenv('PM_BAD_THRESH')} THEN NULL
             ELSE PM10
         END PM10,
+        CASE
+            WHEN PM2_5 >= 500 THEN PM2_5
+            ELSE NULL
+        END PM2_5_Raw,
         CASE 
             WHEN Temperature = -1000 THEN NULL
             ELSE Temperature

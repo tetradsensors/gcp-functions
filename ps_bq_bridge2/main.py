@@ -183,6 +183,14 @@ def _insert_into_bigquery(event, context):
     row[getenv('FIELD_LABEL')] = table_name
     row[getenv('FIELD_SRC')] = 'Tetrad'
 
+    # Filter PM: Values above PM_BAD_THRESH are NULL, 
+    #   and store raw PM val in FIELD_PM2_5_Raw for debug
+    if row[getenv('FIELD_PM2_5')] >= int(getenv('PM_BAD_THRESH')):
+        row[getenv('FIELD_PM2_5_Raw')] = row[getenv('FIELD_PM2_5')]
+        row[getenv('FIELD_PM1')]    = None
+        row[getenv('FIELD_PM2_5')]  = None
+        row[getenv('FIELD_PM10')]   = None
+
     # Add the entry to the appropriate BigQuery Table
     table = bq_client.dataset(getenv('BQ_DATASET_TELEMETRY')).table(getenv('BQ_TABLE'))
     errors = bq_client.insert_rows_json(table,
