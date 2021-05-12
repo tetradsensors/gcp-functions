@@ -12,7 +12,7 @@ import math
 # from flask import jsonify
 import numpy as np
 # import re
-from google.cloud import storage
+# from google.cloud import storage
 import json
 from classes import ArgumentError
 from api_consts import *
@@ -20,33 +20,33 @@ from api_consts import *
 # DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S+0000"
 # BQ_DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
-def getModelBoxes():
-    gs_client = storage.Client()
-    bucket = gs_client.get_bucket(getenv("GS_BUCKET"))
-    blob = bucket.get_blob(getenv("GS_MODEL_BOXES"))
-    model_data = json.loads(blob.download_as_string())
-    return model_data
-MODEL_BOXES = getModelBoxes()
+# def getModelBoxes():
+#     gs_client = storage.Client()
+#     bucket = gs_client.get_bucket(getenv("GS_BUCKET"))
+#     blob = bucket.get_blob(getenv("GS_MODEL_BOXES"))
+#     model_data = json.loads(blob.download_as_string())
+#     return model_data
+# MODEL_BOXES = getModelBoxes()
 
 
-def getModelRegion(src):
-    """
-    MODEL_BOXES is a list of dicts stored in Google Cloud Storage.
-    Each dict in the list looks like this:
-    {
-        "name": "Salt Lake City, Utah",
-        "table": "slc_ut",
-        "qsrc": "SLC",
-        "lat_hi": 40.806852,
-        "lat_lo": 40.644519,
-        "lon_hi": -111.811118,
-        "lon_lo": -111.971465
-    }
-    """
-    for r in MODEL_BOXES:
-        if r['qsrc'] == src:
-            return r
-    return None
+# def getModelRegion(src):
+#     """
+#     MODEL_BOXES is a list of dicts stored in Google Cloud Storage.
+#     Each dict in the list looks like this:
+#     {
+#         "name": "Salt Lake City, Utah",
+#         "table": "slc_ut",
+#         "qsrc": "SLC",
+#         "lat_hi": 40.806852,
+#         "lat_lo": 40.644519,
+#         "lon_hi": -111.811118,
+#         "lon_lo": -111.971465
+#     }
+#     """
+#     for r in MODEL_BOXES:
+#         if r['qsrc'] == src:
+#             return r
+#     return None
             
 
 def parseDatetimeString(datetime_string:str):

@@ -24,6 +24,7 @@ def setPMSModels(df, col_name):
 
 
 def setChildFromParent(df, child_parent_Series, col_name):
+    child_parent_Series = child_parent_Series.dropna()
     df.loc[child_parent_Series.index, col_name] = df.loc[child_parent_Series, col_name].values
     return df
 
@@ -37,10 +38,12 @@ def main(data, context):
         print('Exception: ', str(e), response)
         return
 
-    print('results')
-
         # Convert JSON response to a Pandas DataFrame
     df = pd.DataFrame(results)
+    print(f'rows: {len(df)}')
+
+    if df.empty:
+        return
 
     # Trim off old data
     df['LastSeen'] = pd.to_datetime(df['LastSeen'], unit='s', utc=True)
@@ -90,9 +93,9 @@ def main(data, context):
     df = setChildFromParent(df, par, 'Type')
 
     # Remove rows
-    df = df[df['DEVICE_LOCATIONTYPE'] == 'outside']
-    df = df[df['Flag'] != 1]
-    df = df.dropna(subset=['Lat', 'Lon'])
+    df = df[df['DEVICE_LOCATIONTYPE'] == 'outside'] # Must be outside
+    df = df[df['Flag'] != 1]    # Bad data
+    df = df.dropna(subset=['Lat', 'Lon'])   # No Lat/Lon
 
     # Create the GPS column
     df['GPS'] = df.apply(lambda x: geojson.dumps(geojson.Point((x['Lon'], x['Lat']))), axis=1)
@@ -160,5 +163,5 @@ if __name__ == '__main__':
     import os
     os.environ['BQ_TABLE'] = "telemetry"
     os.environ['BQ_DATASET'] = "dev"
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../local/tetrad.json'
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../global/tetrad.json'
     main('data', 'context')
