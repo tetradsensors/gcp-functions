@@ -83,17 +83,11 @@ def parseDatetimeString(datetime_string:str):
 #     return elevInterps
 
 
-def setupElevationInterpolatorForSource(src):
-    # print('setupElevationInterpolatorForSource')
-    
-    if src in ELEV_MAPS:
-        data = loadmat(ELEV_MAPS[src])
-        elevs_grid = data['elevs']
-        lats_arr = data['lats']
-        lons_arr = data['lons']
-        return interpolate.interp2d(lons_arr, lats_arr, elevs_grid, kind='cubic')
-    else:
-        return None
+def setupElevationInterpolator(elev_mat):
+    elevs_grid = elev_mat['elevs']
+    lats_arr = elev_mat['lats']
+    lons_arr = elev_mat['lons']
+    return interpolate.interp2d(lons_arr, lats_arr, elevs_grid, kind='cubic')
 
 
 # def loadBoundingBox():
@@ -218,7 +212,6 @@ def _tuneData(data:list, pm25_key=None, temp_key=None, hum_key=None, removeNulls
             len_before = len(data)
             data = [datum for datum in data if all(datum.values())]
             len_after = len(data)
-            print(f"removeNulls=True. Removed {len_before - len_after} rows. [{len_before} -> {len_after}]")
         
         # If it's a list, remove the rows missing data listed in removeNulls list        
         elif isinstance(removeNulls, list):
