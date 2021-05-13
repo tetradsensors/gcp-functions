@@ -1,11 +1,11 @@
-from envyaml import EnvYAML
-import os
-env = EnvYAML('.env.yaml')
-for k, v in dict(env).items():
-    os.environ[k] = v
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../global/tetrad.json'
+# from envyaml import EnvYAML
+# import os
+# env = EnvYAML('.env.yaml')
+# for k, v in dict(env).items():
+#     os.environ[k] = v
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../global/tetrad.json'
 
-from json import loads, dumps
+from json import loads
 from scipy.io import loadmat
 from os import getenv
 from io import BytesIO
@@ -14,7 +14,6 @@ import utils
 import gaussian_model_utils
 import pytz
 import numpy as np
-from matplotlib import pyplot as plt 
 from google.cloud import storage, bigquery, firestore
 #######################################################################
 
@@ -186,7 +185,7 @@ def reformat_2dlist(model_data):
                 #   Also, keys are converted to strings to comply with Firestore (keys must be strings)
                 model_data[k] = dict(zip(map(str, range(len(v))), v))
 
-        except TypeError:   # value wasn't supscriptable (not list of lists), just keep going
+        except TypeError:   # value wasn't subscriptable (not list of lists), just keep going
             continue
 
     return model_data 
@@ -194,6 +193,7 @@ def reformat_2dlist(model_data):
 
 def processRegion(regionDict):
 
+    regionDict = regionDict.copy()
     # Query data from BigQuery
     regionDict = queryData(regionDict)
     print('data len:', len(regionDict['data']))
@@ -209,8 +209,6 @@ def processRegion(regionDict):
     final = {}
     final['data'] = response
     final = add_tags(final, regionDict, datetime.datetime.utcnow())
-    # final = dumps(final)
-    print(final)
     collection = FS_CLIENT.collection(getenv("FS_COLLECTION"))
     collection.document(f'{final["shortname"]}_{final["date"]}').set(final)
 
@@ -232,12 +230,12 @@ def main(data, context):
     #   1. Collect and clean data in time frame /region
     #   2. Compute model
     #   3. Store in Firestore
-    # for k, v in REGION_INFO.items():
-    #     print(f'processing {k}')
-    #     try:
-    #         processRegion(v)
-    #     except Exception as e:
-    #         print(str(e))
+    for k, v in REGION_INFO.items():
+        print(f'processing {k}')
+        try:
+            processRegion(v)
+        except Exception as e:
+            print(str(e))
 
     # Remove old documents
     removeOldDocuments()
