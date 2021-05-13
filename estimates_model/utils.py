@@ -185,10 +185,10 @@ def latlonToUTM(lat, lon):
 
 
 # # # TODO: Rename
-# def convertLatLonToUTM(sensor_data):
-#     for datum in sensor_data:
-#         datum['utm_x'], datum['utm_y'], datum['zone_num'], _ = latlonToUTM(datum['Latitude'], datum['Longitude'])
-#     return sensor_data
+def convertLatLonToUTM(sensor_data):
+    for datum in sensor_data:
+        datum['utm_x'], datum['utm_y'], datum['zone_num'], _ = latlonToUTM(datum['Latitude'], datum['Longitude'])
+    return sensor_data
 
 # def convertRadiusToBBox(r, c):
 #     '''
