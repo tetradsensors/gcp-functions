@@ -1,18 +1,12 @@
 # from os import getenv
-from datetime import datetime, timedelta
+from datetime import timedelta
 import dateutil
 from dateutil import parser as dateutil_parser
-# from pytz import timezone
 from utm import from_latlon
-# from matplotlib.path import Path
 from scipy import interpolate
 from scipy.io import loadmat
 from csv import reader as csv_reader
-import math 
-# from flask import jsonify
 import numpy as np
-# import re
-# from google.cloud import storage
 import json
 from classes import ArgumentError
 from api_consts import *
@@ -190,127 +184,127 @@ def latlonToUTM(lat, lon):
     return from_latlon(lat, lon)
 
 
-# # TODO: Rename
-def convertLatLonToUTM(sensor_data):
-    for datum in sensor_data:
-        datum['utm_x'], datum['utm_y'], datum['zone_num'], _ = latlonToUTM(datum['Latitude'], datum['Longitude'])
-    return sensor_data
+# # # TODO: Rename
+# def convertLatLonToUTM(sensor_data):
+#     for datum in sensor_data:
+#         datum['utm_x'], datum['utm_y'], datum['zone_num'], _ = latlonToUTM(datum['Latitude'], datum['Longitude'])
+#     return sensor_data
 
-def convertRadiusToBBox(r, c):
-    '''
-    Latitude:  1 deg = 110.54 km
-    Longitude: 1 deg = 111.320*cos(latitude) km
-    '''
-    N = c[0] + (r / 110540)
-    S = c[0] - (r / 110540)
-    E = c[1] + (r / (111320 * math.cos(math.radians(c[0]))))
-    W = c[1] - (r / (111320 * math.cos(math.radians(c[0]))))
-    return [N, S, E, W]
+# def convertRadiusToBBox(r, c):
+#     '''
+#     Latitude:  1 deg = 110.54 km
+#     Longitude: 1 deg = 111.320*cos(latitude) km
+#     '''
+#     N = c[0] + (r / 110540)
+#     S = c[0] - (r / 110540)
+#     E = c[1] + (r / (111320 * math.cos(math.radians(c[0]))))
+#     W = c[1] - (r / (111320 * math.cos(math.radians(c[0]))))
+#     return [N, S, E, W]
 
 
-# https://www.movable-type.co.uk/scripts/latlong.html
-def distBetweenCoords(p1, p2):
-    """
-    Get the Great Circle Distance between two
-    GPS coordinates, in kilometers
-    """
-    R = 6371
-    phi1 = p1[0] * (math.pi / 180)
-    phi2 = p2[0] * (math.pi / 180)
-    del1 = (p2[0] - p1[0]) * (math.pi / 180)
-    del2 = (p2[1] - p1[1]) * (math.pi / 180)
+# # https://www.movable-type.co.uk/scripts/latlong.html
+# def distBetweenCoords(p1, p2):
+#     """
+#     Get the Great Circle Distance between two
+#     GPS coordinates, in kilometers
+#     """
+#     R = 6371
+#     phi1 = p1[0] * (math.pi / 180)
+#     phi2 = p2[0] * (math.pi / 180)
+#     del1 = (p2[0] - p1[0]) * (math.pi / 180)
+#     del2 = (p2[1] - p1[1]) * (math.pi / 180)
     
-    a = math.sin(del1 / 2) * math.sin(del1 / 2) +   \
-        math.cos(phi1) * math.cos(phi2) *           \
-        math.sin(del2 / 2) * math.sin(del2 / 2)
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    d = R * c 
-    return d
+#     a = math.sin(del1 / 2) * math.sin(del1 / 2) +   \
+#         math.cos(phi1) * math.cos(phi2) *           \
+#         math.sin(del2 / 2) * math.sin(del2 / 2)
+#     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+#     d = R * c 
+#     return d
 
-def coordsInCircle(coords, radius, center):
-    return distBetweenCoords(coords, center) <= radius
-
-
-def bboxDataToRadiusData(data, radius, center):
-    inRad = []
-    for datum in data:
-        lat = datum[FIELD_MAP["LATITUDE"]]
-        lon = datum[FIELD_MAP["LONGITUDE"]]
-        if coordsInCircle((lat, lon), radius, center):
-            inRad.append(datum)
-    return inRad
+# def coordsInCircle(coords, radius, center):
+#     return distBetweenCoords(coords, center) <= radius
 
 
-def verifySources(srcs:list):
-    return set(srcs).issubset(SRC_MAP)
+# def bboxDataToRadiusData(data, radius, center):
+#     inRad = []
+#     for datum in data:
+#         lat = datum[FIELD_MAP["LATITUDE"]]
+#         lon = datum[FIELD_MAP["LONGITUDE"]]
+#         if coordsInCircle((lat, lon), radius, center):
+#             inRad.append(datum)
+#     return inRad
+
+
+# def verifySources(srcs:list):
+#     return set(srcs).issubset(SRC_MAP)
 
 
 def verifyFields(fields:list):
     return set(fields).issubset(FIELD_MAP)
 
 
-def argParseSources(srcs, single_source=False):
-    '''
-    Parse a 'src' argument from request.args.get('src')
-    into a list of sources
-    '''
+# def argParseSources(srcs, single_source=False):
+#     '''
+#     Parse a 'src' argument from request.args.get('src')
+#     into a list of sources
+#     '''
 
-    if ',' in srcs:
+#     if ',' in srcs:
         
-        if single_source:
-            raise ArgumentError(f"Argument 'src' must be one included from: {', '.join(SRC_MAP)}", 400)
+#         if single_source:
+#             raise ArgumentError(f"Argument 'src' must be one included from: {', '.join(SRC_MAP)}", 400)
 
-        srcs = [s.upper() for s in srcs.split(',')]
-    else:
-        srcs = [srcs.upper()]
+#         srcs = [s.upper() for s in srcs.split(',')]
+#     else:
+#         srcs = [srcs.upper()]
     
-    if len(srcs) > 1 and "ALL" in srcs:
-        return "Argument list cannot contain 'ALL' and other sources", 400
-    if len(srcs) > 1 and "ALLGPS" in srcs:
-        return "Argument list cannot contain 'ALLGPS' and other sources", 400
+#     if len(srcs) > 1 and "ALL" in srcs:
+#         return "Argument list cannot contain 'ALL' and other sources", 400
+#     if len(srcs) > 1 and "ALLGPS" in srcs:
+#         return "Argument list cannot contain 'ALLGPS' and other sources", 400
     
-    if "ALLGPS" in srcs:
-        srcs = list(ALLGPS_TBLS)
+#     if "ALLGPS" in srcs:
+#         srcs = list(ALLGPS_TBLS)
 
-    # Check src[s] for validity
-    if not verifySources(srcs):
-        raise ArgumentError(f"Argument 'src' must be included from one or more of {', '.join(SRC_MAP)}", 400)
+#     # Check src[s] for validity
+#     if not verifySources(srcs):
+#         raise ArgumentError(f"Argument 'src' must be included from one or more of {', '.join(SRC_MAP)}", 400)
     
-    if single_source:
-        return srcs[0]
-    else:
-        return srcs
+#     if single_source:
+#         return srcs[0]
+#     else:
+#         return srcs
 
 
-def argParseDatetime(datetime_str:str):
-    try:
-        return parseDatetimeString(datetime_str)
-    except dateutil_parser.ParserError:
-        raise ArgumentError(f'Invalid datetime format. Correct format is: "{DATETIME_FORMAT}". For URL encoded strings, a (+) must be replaced with (%2B). See https://www.w3schools.com/tags/ref_urlencode.ASP for all character encodings.', status_code=400)
+# def argParseDatetime(datetime_str:str):
+#     try:
+#         return parseDatetimeString(datetime_str)
+#     except dateutil_parser.ParserError:
+#         raise ArgumentError(f'Invalid datetime format. Correct format is: "{DATETIME_FORMAT}". For URL encoded strings, a (+) must be replaced with (%2B). See https://www.w3schools.com/tags/ref_urlencode.ASP for all character encodings.', status_code=400)
 
 
-def queryBuildFields(fields):
-    # Build the 'fields' portion of query
-    q_fields = f"""{FIELD_MAP["DEVICEID"]}, 
-                   {FIELD_MAP["TIMESTAMP"]}, 
-                   {FIELD_MAP["LATITUDE"]}, 
-                   {FIELD_MAP["LONGITUDE"]},
-                   {','.join(FIELD_MAP[field] for field in fields)}
-                """
-    return q_fields
+# def queryBuildFields(fields):
+#     # Build the 'fields' portion of query
+#     q_fields = f"""{FIELD_MAP["DEVICEID"]}, 
+#                    {FIELD_MAP["TIMESTAMP"]}, 
+#                    {FIELD_MAP["LATITUDE"]},     
+#                    {FIELD_MAP["LONGITUDE"]},
+#                    {','.join(FIELD_MAP[field] for field in fields)}
+#                 """
+#     return q_fields
 
 
-def queryBuildSources(srcs, query_template):
-    """
-    turns a list of bigquery table names and a query
-    template into a union of the queries across the sources
-    """
-    if srcs[0] == "ALL":
-        tbl_union = query_template % ('*')
-    elif len(srcs) == 1:
-        tbl_union = query_template % (SRC_MAP[srcs[0]])
-    else:
-        tbl_union = '(' + ' UNION ALL '.join([query_template % (SRC_MAP[s]) for s in srcs]) + ')'
+# def queryBuildSources(srcs, query_template):
+#     """
+#     turns a list of bigquery table names and a query
+#     template into a union of the queries across the sources
+#     """
+#     if srcs[0] == "ALL":
+#         tbl_union = query_template % ('*')
+#     elif len(srcs) == 1:
+#         tbl_union = query_template % (SRC_MAP[srcs[0]])
+#     else:
+#         tbl_union = '(' + ' UNION ALL '.join([query_template % (SRC_MAP[s]) for s in srcs]) + ')'
     
-    return tbl_union
+#     return tbl_union
 

@@ -12,5 +12,5 @@ gcloud scheduler jobs create pubsub estimates_model --schedule "*/15 * * * *" --
 ```
 Deploy Function:
 ```bash
-gcloud functions deploy estimates_model --entry-point main --runtime python38 --trigger-resource trigger_estimates_model --trigger-event google.pubsub.topic.publish --timeout 540s --env-vars-file .env.yaml
+gcloud functions deploy estimates_model --entry-point main --runtime python38 --trigger-resource trigger_estimates_model --trigger-event google.pubsub.topic.publish --timeout 540s --memory 2048 --env-vars-file .env.yaml
 ```

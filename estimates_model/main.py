@@ -193,7 +193,6 @@ def reformat_2dlist(model_data):
 
 def processRegion(regionDict):
 
-    regionDict = regionDict.copy()
     # Query data from BigQuery
     regionDict = queryData(regionDict)
     print('data len:', len(regionDict['data']))
@@ -233,7 +232,8 @@ def main(data, context):
     for k, v in REGION_INFO.items():
         print(f'processing {k}')
         try:
-            processRegion(v)
+            regionDict = v.copy()
+            processRegion(regionDict)
         except Exception as e:
             print(str(e))
 
