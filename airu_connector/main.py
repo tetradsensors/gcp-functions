@@ -31,14 +31,11 @@ METRIC_ERROR_MAP = {
 gs_client = storage.Client()
 bucket = gs_client.get_bucket(getenv("GS_BUCKET"))
 blob = bucket.get_blob(getenv("GS_MODEL_BOXES"))
-model_data = json.loads(blob.download_as_string())
+region_info = json.loads(blob.download_as_string())
 
 logged_devices = set()
 
 fs_client = firestore.Client()
-
-def getModelBoxes():
-    return model_data
 
  
 def getLoggedDevices():
@@ -112,29 +109,27 @@ def inPoly(p, poly):
 
 def pointToTableName(p):
     if not sum(p):
-        return getenv('BQ_TABLE_BADGPS')
-    boxes = getModelBoxes()
-    for box in boxes:
+        return getenv('REGION_BADGPS')
+    for info in region_info.values():
+        
+        # Skipped disabled regions
+        if not info['enabled']:
+            continue 
+
+        # Convert lat/lon bounds to a polygon 
         poly = [ 
-            (box['lat_hi'], box['lon_hi']), 
-            (box['lat_lo'], box['lon_hi']), 
-            (box['lat_lo'], box['lon_lo']), 
-            (box['lat_hi'], box['lon_lo']) 
+            (info['lat_hi'], info['lon_hi']), 
+            (info['lat_lo'], info['lon_hi']), 
+            (info['lat_lo'], info['lon_lo']), 
+            (info['lat_hi'], info['lon_lo']) 
         ]
+
+        # If our point is in the polygon, return the "Label"
         if inPoly(p, poly):
-            # print(f"Adding point {p} for bounding box {poly} to table {box['table']}")
-            return box['table']
-    # print(f"Adding point {p} to table {getenv('BQ_TABLE_GLOBAL')}")
-    return getenv('BQ_TABLE_GLOBAL')
-
-
-# def addToFirestore(mac, table):
-#     fs_col = fs_client.collection('devices')
-#     doc_ref = fs_col.document(mac)
-#     if doc_ref.get().exists:
-#         doc_ref.update({
-#             getenv('FS_FIELD_LAST_BQ_TABLE'): table
-#         })
+            return info['shortname']
+    
+    # Region not found, give it the global label
+    return getenv('REGION_GLOBAL')
 
 
 def main(event, context):
@@ -196,20 +191,14 @@ def _insert_into_bigquery(event, context):
     # Add the entry to the appropriate BigQuery Table
     table = bq_client.dataset(getenv('BQ_DATASET_TELEMETRY')).table(getenv('BQ_TABLE'))
     errors = bq_client.insert_rows_json(table,
-                                 json_rows=[row],)
-                                #  retry=retry.Retry(deadline=30))
+                                 json_rows=[row])
     if errors != []:
         print(row)
         raise BigQueryError(errors)
 
-    # (If no insert errors): 
-    # Update FireStore entry for MAC address
-    # addToFirestore(deviceId, table_name)
 
     # Add device to meta.devices
     addNewDevices(set([row[getenv("FIELD_ID")]]))
-
-
 
 
 def _handle_success(deviceID):
