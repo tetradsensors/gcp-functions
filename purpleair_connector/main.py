@@ -101,10 +101,10 @@ def main(data, context):
     df['GPS'] = df.apply(lambda x: geojson.dumps(geojson.Point((x['Lon'], x['Lat']))), axis=1)
 
     # Move bad PM data out of cleaned column
-    df['PM2_5_Raw'] = df.loc[df['PM2_5Value'] > float(getenv('BAD_PM_THRESH')), 'PM2_5Value']
+    df['PM2_5_Raw'] = df.loc[df['PM2_5Value'] >= float(getenv('PM_BAD_THRESH')), 'PM2_5Value']
     df['Flags'] = 0
-    df.loc[df['PM2_5Value'] > float(getenv('BAD_PM_THRESH')), 'Flags'] |= 2
-    df.loc[df['PM2_5Value'] >= float(getenv('BAD_PM_THRESH')), 'PM2_5Value'] = np.nan
+    df.loc[df['PM2_5Value'] >= float(getenv('PM_BAD_THRESH')), 'Flags'] |= 2
+    df.loc[df['PM2_5Value'] >= float(getenv('PM_BAD_THRESH')), 'PM2_5Value'] = np.nan
 
     # Convert temperature F to C
     df['temp_f'] = (df['temp_f'] - 32) * (5. / 9)
@@ -114,7 +114,7 @@ def main(data, context):
 
     # Reduce DataFrame to desired columns
     df = df.reset_index()
-    cols_to_keep = ['LastSeen', 'ID', 'GPS', 'PM2_5Value', 'PMSModel', 'humidity', 'temp_f', 'pressure']
+    cols_to_keep = ['LastSeen', 'ID', 'GPS', 'PM2_5Value', 'PM2_5_Raw', 'Flags', 'PMSModel', 'humidity', 'temp_f', 'pressure']
     df = df.loc[:, df.columns.isin(cols_to_keep)]
 
     # Append 'PP' to device id's

@@ -86,8 +86,8 @@ def main(data, context):
             ELSE NULL
         END PM2_5_Raw,
         CASE
-            WHEN PM2_5 >= {getenv('PM_BAD_THRESH')} THEN IFNULL(Flags|2, 2)
-            ELSE Flags
+            WHEN PM2_5 >= {getenv('PM_BAD_THRESH')} THEN 2
+            ELSE 0
         END Flags,
         CASE 
             WHEN Temperature = -1000 THEN NULL
