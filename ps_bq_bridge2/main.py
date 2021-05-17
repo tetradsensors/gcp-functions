@@ -187,9 +187,11 @@ def _insert_into_bigquery(event, context):
     #   and store raw PM val in FIELD_PM2_5_Raw for debug
     if row[getenv('FIELD_PM2')] >= int(getenv('PM_BAD_THRESH')):
         row[getenv('FIELD_PM2_5_Raw')] = row[getenv('FIELD_PM2')]
-        row[getenv('FIELD_PM1')]    = None
+        row[getenv('FIELD_PM1')]  = None
         row[getenv('FIELD_PM2')]  = None
-        row[getenv('FIELD_PM10')]   = None
+        row[getenv('FIELD_PM10')] = None
+        row[getenv('FIELD_FLG')] |= 2
+        
 
     # Add the entry to the appropriate BigQuery Table
     table = bq_client.dataset(getenv('BQ_DATASET_TELEMETRY')).table(getenv('BQ_TABLE'))
