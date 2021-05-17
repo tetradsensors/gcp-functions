@@ -141,8 +141,8 @@ def main(event, context):
     if 'data' in event:
         try:
             _insert_into_bigquery(event, context)
-        except Exception:
-            _handle_error(event)
+        except Exception as e:
+            _handle_error(event, e)
 
 
 def _insert_into_bigquery(event, context):
@@ -216,9 +216,9 @@ def _handle_success(deviceID):
     # logging.info(message)
 
 
-def _handle_error(event):
+def _handle_error(event, exception):
     if 'deviceId' in event['attributes']:
-        message = 'Error streaming from device \'%s\'. Cause: %s' % (event['attributes']['deviceId'], traceback.format_exc())
+        message = 'Error streaming from device \'%s\'. Cause: %s. Exception: %s.' % (event['attributes']['deviceId'], traceback.format_exc(), exception)
     else:
         message = 'Error in event: %s' % event
     logging.error(message)
