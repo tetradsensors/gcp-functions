@@ -145,7 +145,12 @@ def _insert_into_bigquery(event, context):
     
     deviceId = event['attributes']['deviceId'][1:].upper()
 
-    row = json.loads(data)
+    try:
+        row = json.loads(data)
+    except Exception as e:
+        print(f'len {len(data)}:', data)
+        print('last character:', data[-1])
+        raise e
      
     row[getenv("FIELD_ID")] = deviceId
 
@@ -180,12 +185,15 @@ def _insert_into_bigquery(event, context):
 
     # Filter PM: Values above PM_BAD_THRESH are NULL, 
     #   and store raw PM val in FIELD_PM2_5_Raw for debug
-    if row[getenv('FIELD_PM2')] >= int(getenv('PM_BAD_THRESH')):
-        row[getenv('FIELD_PMRAW')] = row[getenv('FIELD_PM2')]
-        row[getenv('FIELD_PM1')]  = None
-        row[getenv('FIELD_PM2')]  = None
-        row[getenv('FIELD_PM10')] = None
-        row[getenv('FIELD_FLG')] |= 2
+    try:
+        if row[getenv('FIELD_PM2')] >= int(getenv('PM_BAD_THRESH')):
+            row[getenv('FIELD_PMRAW')] = row[getenv('FIELD_PM2')]
+            row[getenv('FIELD_PM1')]  = None
+            row[getenv('FIELD_PM2')]  = None
+            row[getenv('FIELD_PM10')] = None
+            row[getenv('FIELD_FLG')] |= 2
+    except TypeError:
+        pass
         
 
     # Add the entry to the appropriate BigQuery Table
