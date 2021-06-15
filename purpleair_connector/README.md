@@ -13,5 +13,5 @@ gcloud scheduler jobs create pubsub purpleair_connector --schedule "*/5 * * * *"
 ```
 Deploy Function:
 ```bash
-gcloud functions deploy purpleair_connector --entry-point main --runtime python38 --trigger-resource trigger_purpleair_connector --trigger-event google.pubsub.topic.publish --timeout 540s --env-vars-file .env.yaml
+gcloud functions deploy purpleair_connector --entry-point main --runtime python38 --trigger-resource trigger_purpleair_connector --trigger-event google.pubsub.topic.publish --timeout 540s --env-vars-file .env.yaml --memory 512
 ```

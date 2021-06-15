@@ -7,6 +7,7 @@ import datetime
 import geojson
 import numpy as np 
 from matplotlib.path import Path
+from time import sleep
 
 
 def getAreaModelBounds(area_model):
@@ -79,11 +80,12 @@ def buildAreaModelsFromJson(json_data):
     return area_models
 
 
-def applyRegionalLabelsToDataFrame(regions_info, df, null_value=np.nan):
+def applyRegionalLabelsToDataFrame(regions_dict, df, null_value=np.nan):
     df['Label'] = null_value
 
-    for region_name, region_info in regions_info.items():
+    for region_name, region_info in regions_dict.items():
         bbox = getAreaModelBounds(region_info)
+        
         df.loc[
             (df['Lat'] >= bbox['lat_lo']) &
             (df['Lat'] <= bbox['lat_hi']) &
@@ -91,9 +93,11 @@ def applyRegionalLabelsToDataFrame(regions_info, df, null_value=np.nan):
             (df['Lon'] <= bbox['lon_hi']),
             'Label'
         ] = region_info['shortname']
+        
+        print(f"For region {region_name}, applied labels to {len(df[df['Label'] == region_info['shortname']])} rows")
 
-        print(f"Regional labels applied to {len(df[~df['Label'].isnull()])} out of {len(df)} rows. ({int(100 * (len(df[~df['Label'].isnull()]) / len(df)))})")
-        return df
+    print(f"Regional labels applied to {len(df[~df['Label'].isnull()])} out of {len(df)} rows. ({int(100 * (len(df[~df['Label'].isnull()]) / len(df)))})")
+    return df
 
 
 def applyRegionalLabelsToDataFrameAndTrim(regions_info, df):
@@ -116,10 +120,30 @@ def setPMSModels(df, col_name):
     return df
 
 
-def setChildFromParent(df, child_parent_Series, col_name):
-    child_parent_Series = child_parent_Series.dropna()
-    df.loc[child_parent_Series.index, col_name] = df.loc[child_parent_Series, col_name].values
+def setChildFromParent(df, pairings, col_name):
+    df.loc[pairings.index, col_name] = df.loc[pairings, col_name].values
     return df
+
+
+def getParentChildPairing(df):
+    '''
+    Purple Air devices have two PM sensors inside. Data is reported for both sensors seperately,
+    but one sensor is considered the "parent" and one is the "child". The child has
+    lots of missing information, like DEVICE_LOCATIONTYPE, Flag, Type. So we create
+    this Series to link parents and children, then later use this Series to fill in
+    missing data for the children with data from their parents. 
+    
+    Beware: sometimes we find orphans - rows with a non-null ParentID, but no corresponding 
+    row with an ID equal to the value of that ParentID. 
+    '''
+
+    # Get the rows where ParentID is not Null (ParentID values are the IDs of the parent sensors)
+    pairings = df['ParentID'].loc[~df['ParentID'].isnull()].astype(int)
+
+    # Eliminate orphans (sorry orphans)
+    pairings = pairings[pairings.isin(df.index)]
+
+    return pairings
 
 
 def main(data, context):
@@ -133,8 +157,16 @@ def main(data, context):
         response = json.loads(requests.get('https://www.purpleair.com/json?a').text)
         results = response['results']
     except Exception as e:
-        print('Exception: ', str(e), response)
-        return
+        print('Could not download data. Exception: ', str(e), response)
+        try:
+            print('trying again after 15 seconds')
+            sleep(15)
+            response = json.loads(requests.get('https://www.purpleair.com/json?a').text)
+            results = response['results']
+        except:
+            print('Could not download data (take 2). Exception: ', str(e), response)
+            return
+            
 
     # Convert JSON response to a Pandas DataFrame
     df = pd.DataFrame(results)
@@ -146,20 +178,23 @@ def main(data, context):
     # Trim off old data
     df['LastSeen'] = pd.to_datetime(df['LastSeen'], unit='s', utc=True)
 
-    # Run every 5 minutes, so give 1 minute overlap
+    # Remove all datapoints older than 6 minutes. Run every 5 minutes, so give 1 minute overlap
     df = df[df['LastSeen'] > (pd.Timestamp.utcnow() - pd.Timedelta(6, unit='minutes'))]
 
     # Following Series operations depend on having an index
     df = df.set_index('ID')
 
     # Get Series with index = child ID and 'ParentID' = Parent ID
-    par = df['ParentID'].loc[~df['ParentID'].isnull()].astype(int)
+    pairing = getParentChildPairing(df)
     
     # Set DEVICE_LOCATIONTYPE child to DEVICE_LOCATIONTYPE parent
-    df = setChildFromParent(df, par, 'DEVICE_LOCATIONTYPE')
+    df = setChildFromParent(df, pairing, 'DEVICE_LOCATIONTYPE')
 
-    # Apply regional labels
-    df = applyRegionalLabelsToDataFrame(_area_models, df)
+    # Set flag of child sensor to flag of parent sensor
+    df = setChildFromParent(df, pairing, 'Flag')
+
+    # Set the 'Type' string of child to that of parent
+    df = setChildFromParent(df, pairing, 'Type')
 
     # Use 'Flag', 'A_H', 'Hidden' to filter out bad data
     #   'Flag': Data flagged for unusually high readings
@@ -187,16 +222,13 @@ def main(data, context):
     # If any of these are true, remove the row
     df['Flag'] = df['Flag'] | df['A_H'] | df['Hidden']
 
-    # Set flag of child sensor to flag of parent sensor
-    df = setChildFromParent(df, par, 'Flag')
-
-    # Set the 'Type' string of child to that of parent
-    df = setChildFromParent(df, par, 'Type')
-
     # Remove rows
-    df = df[df['DEVICE_LOCATIONTYPE'] == 'outside'] # Must be outside
-    df = df[df['Flag'] != 1]    # Bad data
-    df = df.dropna(subset=['Lat', 'Lon'])   # No Lat/Lon
+    df = df[df['DEVICE_LOCATIONTYPE'] == 'outside']     # Remove sensors not outside
+    df = df[df['Flag'] != 1]                            # Remove sensors with Flag, A_H, or Hidden flags
+    df = df.dropna(subset=['Lat', 'Lon'])               # Remove sensors with no lat/lon info
+
+    # Apply regional labels ('slc_ut', 'chatt_tn', etc.)
+    df = applyRegionalLabelsToDataFrame(_area_models, df)
 
     # Create the GPS column
     df['GPS'] = df.apply(lambda x: geojson.dumps(geojson.Point((x['Lon'], x['Lat']))), axis=1)
@@ -229,12 +261,12 @@ def main(data, context):
 
     # Rename columns
     df = df.rename({
-        'LastSeen': 'Timestamp',
-        'ID': 'DeviceID', 
-        'PM2_5Value': 'PM2_5',
-        'humidity': 'Humidity', 
-        'temp_f': 'Temperature',
-        'pressure': 'Pressure'
+        'LastSeen':     'Timestamp',
+        'ID':           'DeviceID', 
+        'PM2_5Value':   'PM2_5',
+        'humidity':     'Humidity', 
+        'temp_f':       'Temperature',
+        'pressure':     'Pressure'
     }, axis='columns')
 
 
@@ -244,11 +276,10 @@ def main(data, context):
     # Create unique row_ids to avoid duplicates when inserting overlapping data
     row_ids = pd.util.hash_pandas_object(df).values.astype(str)
 
-    print('cleaned...')
-
     client = Client()
     target_table = client.dataset(getenv("BQ_DATASET")).table(getenv("BQ_TABLE"))
     
+    # Maximum upload size for BigQuery API is 10,000 rows, so we have to upload the data in chunks
     for i, (data_chunk, rows_chunk) in enumerate(zip(chunk_list(data, chunk_size=10000), chunk_list(row_ids, chunk_size=10000))):
         print(f'Sending chunk {i + 1}...')
         errors = client.insert_rows_json(
