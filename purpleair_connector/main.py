@@ -6,7 +6,77 @@ from os import getenv
 import datetime
 import geojson
 import numpy as np 
+
+
+def getAreaModelBounds(area_model):
+    area_bounds = area_model['boundingbox']
+    bounds = dict()
+    bounds['lat_hi'] = area_bounds[0][1]
+    bounds['lon_hi'] = area_bounds[1][2]
+    bounds['lat_lo'] = area_bounds[2][1]
+    bounds['lon_lo'] = area_bounds[0][2]
+    if bounds['lat_hi'] <= bounds['lat_lo'] or bounds['lon_hi'] < bounds['lon_lo']:
+        return None
+    else:
+        return bounds
+
+
+def isQueryInBoundingBox(bounding_box_vertices, query_lat, query_lon):
+    verts = [(0, 0)] * len(bounding_box_vertices)
+    for elem in bounding_box_vertices:
+        verts[elem[0]] = (elem[2], elem[1])
+    # Add first vertex to end of verts so that the path closes properly
+    verts.append(verts[0])
+    codes = [Path.MOVETO]
+    codes += [Path.LINETO] * (len(verts) - 2)
+    codes += [Path.CLOSEPOLY]
+    boundingBox = Path(verts, codes)
+    return boundingBox.contains_point((query_lon, query_lat))
     
+
+def getAreaModelByLocation(area_models, lat=0.0, lon=0.0, string=None):
+    if string is None:
+        for key in area_models:
+            if (isQueryInBoundingBox(area_models[key]['boundingbox'], lat, lon)):
+                print(f'Using area_model for {key}')
+                return area_models[key]
+    else:
+        try:
+            return area_models[string]
+        except:
+            print("Got bad request for area by string: " + str(string))
+
+    print("Query location "+str(lat)+ "," + str(lon) + " not in any known model area")
+    return None
+
+
+def loadBoundingBox(bbox_info):
+        rows = [row for row in bbox_info]
+        bounding_box_vertices = [(index, float(row['Latitude']), float(row['Longitude'])) for row, index in zip(rows, range(len(rows)))]
+        return bounding_box_vertices
+
+
+def buildAreaModelsFromJson(json_data):
+    area_models = {}
+    for key in json_data:
+        this_model = {}
+        this_model['shortname'] = json_data[key]['shortname']
+        this_model['timezone'] = json_data[key]['Timezone']
+        this_model['idstring'] = json_data[key]['ID String']
+        this_model['elevationfile'] = json_data[key]['Elevation File']
+        this_model['note'] = json_data[key]['Note']
+        # this_model['elevationinterpolator'] = buildAreaElevationInterpolator(json_data[key]['Elevation File'])
+        this_model['elevationinterpolator'] = None
+        this_model['boundingbox'] = loadBoundingBox(json_data[key]['Boundingbox'])
+        # this_model['correctionfactors'] = loadCorrectionFactors(json_data[key]['Correction Factors'],json_data[key]['Timezone'])
+        # this_model['lengthscales'] = loadLengthScales(json_data[key]['Length Scales'], json_data[key]['Timezone'])
+        if 'Source table map' in json_data[key]:
+            this_model['sourcetablemap'] = json_data[key]['Source table map']
+        # else:
+        #     this_model['sourcetablemap'] = None
+        area_models[key] = this_model
+    return area_models
+
 
 def chunk_list(ls, chunk_size=10000):
     '''
@@ -31,6 +101,7 @@ def setChildFromParent(df, child_parent_Series, col_name):
 
 def main(data, context):
 
+    response = None
     try:
         response = json.loads(requests.get('https://www.purpleair.com/json?a').text)
         results = response['results']
