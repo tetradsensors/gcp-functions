@@ -1,9 +1,10 @@
 from datetime import timedelta
+import datetime
 import os
 import json
 # from tetrad import app, bq_client, bigquery, utils, cache, jsonutils, log_client, gaussian_model_utils
 import utils, jsonutils, gaussian_model_utils
-from google.cloud import bigquery
+from google.cloud import bigquery, firestore
 # from tetrad import _area_models
 # from dotenv import load_dotenv
 
@@ -11,8 +12,11 @@ import numpy as np
 # Find timezone based on longitude and latitude
 from timezonefinder import TimezoneFinder
 
-import psutil
-p = psutil.Process()
+# import psutil
+# p = psutil.Process()
+
+LAT_SIZE = 100
+LON_SIZE = LAT_SIZE
 
 # Load in .env and set the table name
 # load_dotenv()  # Required for compatibility with GCP, can't use pipenv there
@@ -20,6 +24,7 @@ p = psutil.Process()
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
 os.environ['TELEMETRY_TABLE_ID'] = 'telemetry.telemetry'
 bq_client = bigquery.Client()
+fs_client = firestore.Client()
 with open('area_params.json') as json_file:
         json_temp = json.load(json_file)
 _area_models = jsonutils.buildAreaModelsFromJson(json_temp)
@@ -180,10 +185,10 @@ def getEstimateMap(areaModel, time, latSize, lonSize):
     # else:
     #     area_string = None
 
-    area_string = areaModel
+    # area_string = areaModel
 
     # area_model = jsonutils.getAreaModelByLocation(_area_models, lat=lat_hi, lon=lon_lo, string = area_string)
-    area_model = jsonutils.getAreaModelByLocation(_area_models, string=area_string)
+    area_model = areaModel
     # if area_model == None:
     #     msg = f"The query location, lat={lat_hi}, lon={lon_lo}, and/or area string {area_string} does not have a corresponding area model"
     #     return msg, 400
@@ -235,16 +240,25 @@ def getEstimateMap(areaModel, time, latSize, lonSize):
     elevations = (elevations).tolist()
     yPred = yPred.reshape((lat_size, lon_size, num_times))
     yVar = yVar.reshape((lat_size, lon_size, num_times))
-    estimates = yPred.tolist()
-    variances = yVar.tolist()
-    return_object = {"Area model": area_model["note"],"Elevations":elevations,"Latitudes":lat_vector.tolist(), "Longitudes":lon_vector.tolist()
-                         }
+    # estimates = yPred.tolist()
+    # variances = yVar.tolist()
+    return_object = {
+        "Area model": area_model["note"],
+        "Elevations":elevations,
+        "Latitudes":lat_vector.tolist(), 
+        "Longitudes":lon_vector.tolist()
+    }
 
     estimates = []
     for i in range(num_times):
         estimates.append(
-            {'PM2_5': (yPred[:,:,i]).tolist(), 'variance': (yVar[:,:,i]).tolist(), 'datetime': query_dates[i].strftime('%Y-%m-%d %H:%M:%S%z'), 'Status': status[i]}
-            )
+            {
+                'PM2_5': (yPred[:,:,i]).tolist(), 
+                'variance': (yVar[:,:,i]).tolist(), 
+                'datetime': query_dates[i].strftime('%Y-%m-%d %H:%M:%S%z'), 
+                'Status': status[i]
+            }
+        )
 
     return_object['estimates'] = estimates
     return return_object
@@ -473,25 +487,65 @@ def computeEstimatesForLocations(query_dates, query_locations, query_elevations,
 
 
 def removeOldDocuments():
-    print('removing old documents...')
-    max_age = int(getenv("FS_MAX_DOC_AGE_DAYS"))
-    date_threshold = datetime.datetime.utcnow() - datetime.timedelta(days=max_age)
-    col = FS_CLIENT.collection(getenv("FS_COLLECTION"))
+    max_age_days = 15
+    date_threshold = datetime.datetime.utcnow() - datetime.timedelta(days=max_age_days)
+    col = fs_client.collection('estimateMaps')
     docs = col.where('date', '<=', date_threshold).stream()
     for doc in docs:
-        print(f"Removing: {doc.id}")
         col.document(doc.id).delete()
 
-        
+
+def reformat_2dlist(list2d):            
+    # List of lists is now dict of lists with row indices as keys
+    #   Also, keys are converted to strings to comply with Firestore (keys must be strings)
+    return dict(zip(map(str, range(len(list2d))), list2d))
+
+
+def format_obj(areaModel, d):
+    estimates = d['estimates'][0]
+    data = {
+        'PM2.5': reformat_2dlist(estimates['PM2_5']),
+        'PM2.5 variance': reformat_2dlist(estimates['variance']),
+        'Elevations': reformat_2dlist(d['Elevations']),
+        'Latitudes': d['Latitudes'],
+        'Longitudes': d['Longitudes']
+    }
+    
+    final = {
+        'lat_size': LAT_SIZE,
+        'lon_size': LON_SIZE,
+        'lat_lo': min(d['Latitudes']),
+        'lat_hi': max(d['Latitudes']),
+        'lon_lo': min(d['Longitudes']),
+        'lon_hi': max(d['Longitudes']),
+        'shortname': areaModel['shortname'],
+        'region_name': areaModel['note'],
+        'date': estimates['datetime'],
+        'data': data
+    }
+
+    return final
+
+
+
 def main(data, context):
-    # areaModel = 'Salt_Lake_City'
-    areaModel = 'Cleveland'
-    time = '2021-06-01T12:00:00Z'
-    latSize = 100
-    lonSize = latSize
-    print(f'Peak memory before: {p.memory_full_info().rss // 1024 ** 2} MB')
-    estimate_obj = getEstimateMap(areaModel, time, latSize, lonSize)
-    print(f'Peak memory after: {p.memory_full_info().rss // 1024 ** 2} MB')
+    
+    for area_string in ['Cleveland', 'Kansas_City', 'Chattanooga']:
+        print(area_string)
+        time = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:00Z')
+
+        areaModel = jsonutils.getAreaModelByLocation(_area_models, string=area_string)
+
+        estimate_obj = getEstimateMap(areaModel, time, LAT_SIZE, LON_SIZE)
+
+        # Add to Firestore
+        obj = format_obj(areaModel, estimate_obj)
+        collection = fs_client.collection('estimateMaps')
+        doc_name = f'{obj["shortname"]}_{obj["date"]}'
+        collection.document(doc_name).set(obj)
+        print(f'saved to {doc_name}')
+
+    removeOldDocuments()
 
 
 if __name__ == '__main__':

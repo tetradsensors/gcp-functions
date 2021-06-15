@@ -130,6 +130,7 @@ def buildAreaModelsFromJson(json_data):
     area_models = {}
     for key in json_data:
         this_model = {}
+        this_model['shortname'] = json_data[key]['shortname']
         this_model['timezone'] = json_data[key]['Timezone']
         this_model['idstring'] = json_data[key]['ID String']
         this_model['elevationfile'] = json_data[key]['Elevation File']

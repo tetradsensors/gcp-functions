@@ -1,6 +1,7 @@
 {
     "Salt_Lake_City":
     {
+	"shortname": "slc_ut",
 	"Note": "Salt Lake City",
 	"Timezone": "America/Denver",
 	"ID String":["TELEMETRY_TABLE_ID"],
@@ -106,6 +107,7 @@
     },
     "Cleveland":
     {
+	"shortname": "clev_oh",
 	"Note": "Cleveland - temporary",
 	"Timezone": "America/Chicago",
 	"ID String":["TELEMETRY_TABLE_ID"],
@@ -132,6 +134,7 @@
     },
     "Kansas_City":
     {
+	"shortname": "kc_mo",
 	"Note": "Kansas City - temporary",
 	"Timezone": "America/Chicago",
 	"ID String":["TELEMETRY_TABLE_ID"],
@@ -158,6 +161,7 @@
     },
     "Chattanooga":
     {
+	"shortname": "chatt_tn",
 	"Note": "Chattanooga - temporary",
 	"Timezone": "America/New_York",
 	"ID String":["TELEMETRY_TABLE_ID"],
