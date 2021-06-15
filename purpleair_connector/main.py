@@ -92,8 +92,9 @@ def applyRegionalLabelsToDataFrame(regions_info, df, null_value=np.nan):
             'Label'
         ] = region_info['shortname']
 
-        print(f"Regional labels applied to {len(df[~df['Label'].isnull()])} out of {len(df)} rows. ({int(100 * (len(df[~df['Label'].isnull()])/len(df)))})")
+        print(f"Regional labels applied to {len(df[~df['Label'].isnull()])} out of {len(df)} rows. ({int(100 * (len(df[~df['Label'].isnull()]) / len(df)))})")
         return df
+
 
 def applyRegionalLabelsToDataFrameAndTrim(regions_info, df):
     df = applyRegionalLabelsToDataFrame(regions_info, df)
@@ -214,7 +215,7 @@ def main(data, context):
 
     # Reduce DataFrame to desired columns
     df = df.reset_index()
-    cols_to_keep = ['LastSeen', 'ID', 'GPS', 'PM2_5Value', 'PM2_5_Raw', 'Flags', 'PMSModel', 'humidity', 'temp_f', 'pressure']
+    cols_to_keep = ['LastSeen', 'ID', 'GPS', 'PM2_5Value', 'PM2_5_Raw', 'Flags', 'PMSModel', 'humidity', 'temp_f', 'pressure', 'Label']
     df = df.loc[:, df.columns.isin(cols_to_keep)]
 
     # Append 'PP' to device id's
