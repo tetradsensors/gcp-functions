@@ -6,6 +6,7 @@ from os import getenv
 import datetime
 import geojson
 import numpy as np 
+from matplotlib.path import Path
 
 
 def getAreaModelBounds(area_model):
@@ -32,7 +33,7 @@ def isQueryInBoundingBox(bounding_box_vertices, query_lat, query_lon):
     codes += [Path.CLOSEPOLY]
     boundingBox = Path(verts, codes)
     return boundingBox.contains_point((query_lon, query_lat))
-    
+
 
 def getAreaModelByLocation(area_models, lat=0.0, lon=0.0, string=None):
     if string is None:
@@ -78,6 +79,27 @@ def buildAreaModelsFromJson(json_data):
     return area_models
 
 
+def applyRegionalLabelsToDataFrame(regions_info, df, null_value=np.nan):
+    df['Label'] = null_value
+
+    for region_name, region_info in regions_info.items():
+        bbox = getAreaModelBounds(region_info)
+        df.loc[
+            (df['Lat'] >= bbox['lat_lo']) &
+            (df['Lat'] <= bbox['lat_hi']) &
+            (df['Lon'] >= bbox['lon_lo']) &
+            (df['Lon'] <= bbox['lon_hi']),
+            'Label'
+        ] = region_info['shortname']
+
+        print(f"Regional labels applied to {len(df[~df['Label'].isnull()])} out of {len(df)} rows. ({int(100 * (len(df[~df['Label'].isnull()])/len(df)))})")
+        return df
+
+def applyRegionalLabelsToDataFrameAndTrim(regions_info, df):
+    df = applyRegionalLabelsToDataFrame(regions_info, df)
+    return df.dropna(subset=['Label'])
+
+
 def chunk_list(ls, chunk_size=10000):
     '''
     BigQuery only allows inserts <=10,000 rows
@@ -101,6 +123,10 @@ def setChildFromParent(df, child_parent_Series, col_name):
 
 def main(data, context):
 
+    with open('area_params.json') as json_file:
+        json_temp = json.load(json_file)
+    _area_models = buildAreaModelsFromJson(json_temp)
+
     response = None
     try:
         response = json.loads(requests.get('https://www.purpleair.com/json?a').text)
@@ -109,7 +135,7 @@ def main(data, context):
         print('Exception: ', str(e), response)
         return
 
-        # Convert JSON response to a Pandas DataFrame
+    # Convert JSON response to a Pandas DataFrame
     df = pd.DataFrame(results)
     print(f'rows: {len(df)}')
 
@@ -130,6 +156,9 @@ def main(data, context):
     
     # Set DEVICE_LOCATIONTYPE child to DEVICE_LOCATIONTYPE parent
     df = setChildFromParent(df, par, 'DEVICE_LOCATIONTYPE')
+
+    # Apply regional labels
+    df = applyRegionalLabelsToDataFrame(_area_models, df)
 
     # Use 'Flag', 'A_H', 'Hidden' to filter out bad data
     #   'Flag': Data flagged for unusually high readings
