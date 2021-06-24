@@ -112,9 +112,11 @@ def inPoly(p, poly):
     return c
 
 
-def pointToTableName(p):
-    if not sum(p):
+def getRegionFromPoint(p):
+    
+    if not any(p):
         return getenv('REGION_BADGPS')
+
     for info in region_info.values():
         
         # Skipped disabled regions
@@ -174,7 +176,7 @@ def _insert_into_bigquery(event, context):
                     row[getenv("FIELD_HTR")] = None
 
     # Use GPS to get the correct table         
-    table_name = pointToTableName((row[getenv("FIELD_LAT")], row[getenv("FIELD_LON")]))
+    region_name = getRegionFromPoint((row[getenv("FIELD_LAT")], row[getenv("FIELD_LON")]))
 
     # Update GPS coordinates (so we aren't storing erroneous 0.0's in database)
     if not sum([row[getenv("FIELD_LAT")], row[getenv("FIELD_LON")]]):
@@ -187,7 +189,7 @@ def _insert_into_bigquery(event, context):
     row.pop(getenv('FIELD_LAT'), None)
     row.pop(getenv('FIELD_LON'), None)
 
-    row[getenv('FIELD_LABEL')] = table_name
+    row[getenv('FIELD_LABEL')] = region_name
     row[getenv('FIELD_SRC')] = 'Tetrad'
 
     # Filter PM: Values above PM_BAD_THRESH are NULL, 
