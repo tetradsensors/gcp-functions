@@ -6,6 +6,7 @@ This Cloud function is responsible for:
 import base64
 import json
 from os import getenv
+from hashlib import md5
 import logging
 import traceback
 from datetime import datetime
@@ -37,7 +38,11 @@ logged_devices = set()
 
 fs_client = firestore.Client()
 
- 
+
+def _hash(x):
+    return md5(str(x).encode('utf-8')).hexdigest()
+
+
 def getLoggedDevices():
     global logged_devices
     if not logged_devices:
@@ -133,11 +138,13 @@ def pointToTableName(p):
 
 
 def main(event, context):
-    if 'data' in event:
-        try:
-            _insert_into_bigquery(event, context)
-        except Exception as e:
-            _handle_error(event, e)
+    # if 'data' in event:
+    try:
+        entry_info = _insert_into_bigquery(event, context)
+    except Exception as e:
+        _handle_error(event, e)
+    
+    _handle_success(entry_info)
 
 
 def _insert_into_bigquery(event, context):
@@ -194,12 +201,25 @@ def _insert_into_bigquery(event, context):
             row[getenv('FIELD_FLG')] |= 2
     except TypeError:
         pass
-        
 
+    # All Tetrad sensors use PMS3003 particle counter
+    row[getenv('FIELD_PMS')] = "PMS3003"
+
+    # Unique row ID constructed from only timestamp and device id
+    # NOTE: Cannot use default hash() function because it is not
+    #       consistent across instances, whereas md5 hash is. 
+    row_ids = _hash(
+        (
+            row[getenv("FIELD_TS")], 
+            row[getenv("FIELD_ID")]
+        )
+    )
     # Add the entry to the appropriate BigQuery Table
     table = bq_client.dataset(getenv('BQ_DATASET_TELEMETRY')).table(getenv('BQ_TABLE'))
-    errors = bq_client.insert_rows_json(table,
-                                 json_rows=[row])
+    errors = bq_client.insert_rows_json(
+        table,
+        json_rows=[row],
+        row_ids=[row_ids])
     if errors != []:
         print(row)
         raise BigQueryError(errors)
@@ -208,10 +228,18 @@ def _insert_into_bigquery(event, context):
     # Add device to meta.devices
     addNewDevices(set([row[getenv("FIELD_ID")]]))
 
+    return dict(
+        device_id=deviceId,
+        payload_bytes=len(data)
+    )
 
-def _handle_success(deviceID):
-    message = 'Device \'%s\' streamed into BigQuery' % deviceID
-    # logging.info(message)
+
+def _handle_success(entry_info):
+    r = dict(
+        severity="DEBUG",
+        **entry_info
+    )
+    print(json.dumps(r))
 
 
 def _handle_error(event, exception):

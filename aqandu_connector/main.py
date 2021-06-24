@@ -101,6 +101,7 @@ def main(data, context):
         `NO` AS MicsNOX,
         MICS AS MicsHeater,
         "AQ&U" AS Source,
+        "PMS3003" AS PMSModel,
         "{getenv('FIELD_LABEL')}" AS Label
     FROM 
         `aqandu-184820.production.airu_stationary` 

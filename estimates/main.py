@@ -21,7 +21,7 @@ LON_SIZE = LAT_SIZE
 # Load in .env and set the table name
 # load_dotenv()  # Required for compatibility with GCP, can't use pipenv there
 
-# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
 os.environ['TELEMETRY_TABLE_ID'] = 'telemetry.telemetry'
 bq_client = bigquery.Client()
 fs_client = firestore.Client()
@@ -206,11 +206,15 @@ def getEstimateMap(areaModel, time, latSize, lonSize):
     # build the grid of query locations
     if not UTM:
         lon_vector, lat_vector = utils.interpolateQueryLocations(lat_lo, lat_hi, lon_lo, lon_hi, lat_res, lon_res)
+        print('lon_vector:', lon_vector)
+        print()
+        print('lat_vector:', lat_vector)
     else:
         return 'UTM not yet supported', 400
 
     area_model['elevationinterpolator'] = jsonutils.buildAreaElevationInterpolator(area_model['elevationfile'])
     elevations = area_model['elevationinterpolator'](lon_vector, lat_vector)
+    print(elevations.shape)
     locations_lon, locations_lat = np.meshgrid(lon_vector, lat_vector)
     query_lats = locations_lat.flatten()
     query_lons= locations_lon.flatten()
@@ -235,6 +239,7 @@ def getEstimateMap(areaModel, time, latSize, lonSize):
 
     yPred, yVar, status = computeEstimatesForLocations(query_dates, query_locations, query_elevations, area_model)
     
+    print(yPred.shape)
     num_times = len(query_dates)
 
     elevations = (elevations).tolist()
@@ -549,4 +554,15 @@ def main(data, context):
 
 
 if __name__ == '__main__':
-    main('data', 'context')
+    # main('data', 'context')
+    
+    areaModel = jsonutils.getAreaModelByLocation(_area_models, string='Chattanooga')
+
+    estimate_obj = getEstimateMap(areaModel, '2021-06-19T05:00:00Z', latSize=100, lonSize=100)
+    from matplotlib import pyplot as plt 
+    plt.imshow(estimate_obj['estimates'][0]['PM2_5'], origin='lower')
+    plt.show()
+    # import json
+    # with open('/Users/tombo/Downloads/gcp_estimates_chatt_2021-06-19.json', 'w') as handle:
+    #     json.dump(estimate_obj, handle)
+    # print('saved to', '/Users/tombo/Downloads/gcp_estimates_chatt_2021-06-19.json')
