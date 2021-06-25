@@ -5,52 +5,80 @@ This Cloud function is responsible for:
 '''
 import base64
 import json
-from os import getenv
+# from os import getenv
 from hashlib import md5
 import logging
 import traceback
-from datetime import datetime
+import os
 from google.cloud import firestore, storage, bigquery 
-from google.api_core import retry
-import geojson
-import pytz
+from geojson import dumps as gjdumps, Point as gjPoint 
+import yaml
 
-bq_client = bigquery.Client()
-
-METRIC_ERROR_MAP = {
-    getenv("FIELD_ELE"):    0,
-    getenv("FIELD_PM1"):    -1,
-    getenv("FIELD_PM2"):    -1,
-    getenv("FIELD_PM10"):   -1,
-    getenv("FIELD_TEMP"):   -1000,
-    getenv("FIELD_HUM"):    -1000,
-    getenv("FIELD_RED"):    10000,
-    getenv("FIELD_NOX"):    10000,
-}
-
-# Keep these global so they are persistant across invocations
+# All the GCP Clients are persistant across instances
 gs_client = storage.Client()
-bucket = gs_client.get_bucket(getenv("GS_BUCKET"))
-blob = bucket.get_blob(getenv("GS_MODEL_BOXES"))
-region_info = json.loads(blob.download_as_string())
+bq_client = bigquery.Client()
+fs_client = firestore.Client()
 
+# Download the project environment variables
+env = yaml.load(
+    gs_client.get_bucket(os.getenv('gs_bucket')).get_blob(os.getenv('config')).download_as_string(),
+    Loader=yaml.SafeLoader)
+
+# Information for all the regions
+area_params = json.loads(
+    gs_client.get_bucket(env['storage']['server_bucket']['name']
+    ).get_blob(env['storage']['server_bucket']['files']['area_params']
+    ).download_as_string())
+
+env['storage']['server_bucket']['files']['area_params']
+# List of all the devices that have responded. Reloaded from BigQuery after new deployment
 logged_devices = set()
 
-fs_client = firestore.Client()
+# Error values for relevant BigQuery fields (makes life easier below)
+METRIC_ERROR_MAP = {k: v for k, v in env['airu']['errors'].items()}
+airu_schema = env['airu']['fields']
+bq_schema = env['bigquery']['tbl_telemetry']['schema']
+
+# Mapping of common fields between AirU entries and BQ entries 
+AIRU_BQ_MAP = {
+    airu_schema['ts']:     bq_schema['ts'],
+    airu_schema['id']:     bq_schema['id'],
+    airu_schema['ele']:    bq_schema['ele'],
+    airu_schema['pm1']:    bq_schema['pm1'],
+    airu_schema['pm2_5']:  bq_schema['pm2_5'],
+    airu_schema['pm10']:   bq_schema['pm10'],
+    airu_schema['temp']:   bq_schema['temp'],
+    airu_schema['hum']:    bq_schema['hum'],
+    airu_schema['red']:    bq_schema['red'],
+    airu_schema['nox']:    bq_schema['nox'],
+    airu_schema['htr']:    bq_schema['htr'],
+    airu_schema['rssi']:   bq_schema['rssi'],
+    airu_schema['flags']:  bq_schema['flags']
+}
 
 
 def _hash(x):
+    """
+    Hash a tuple. Different from default hash() because it is consistent
+    across instances, whereas hash() gets randomly seeded at the start
+    of an instance. Used for BigQuery insert row_ids
+    """
     return md5(str(x).encode('utf-8')).hexdigest()
 
 
 def getLoggedDevices():
+    """
+    All Tetrad devices that have responded. After deployment the global
+    variable 'logged_devices' is populated from the BigQuery table
+    meta.devices. 
+    """
     global logged_devices
-    if not logged_devices:
+    if len(logged_devices) == 0:
         query = f"""
         SELECT
             DeviceID
         FROM
-            `meta.devices`
+            `{env['bigquery']['tbl_devices']['name']}`
         WHERE
             Source = "Tetrad"
         """
@@ -60,10 +88,19 @@ def getLoggedDevices():
 
 
 def addNewDevicesToBigQuery(new_devices:set):
+    """
+    Add new devices we've collected to Bigquery
+    """
     if new_devices:
-        rows = [{'DeviceID': dev, 'Source': "Tetrad"} for dev in new_devices]
+        rows = [{
+                    env['bigquery']['tbl_devices']['schema']['id']: dev, 
+                    env['bigquery']['tbl_devices']['schema']['source']: "Tetrad"
+                } 
+            for dev in new_devices
+        ]
         row_ids = [r['DeviceID'] for r in rows]
-        target_table = bq_client.dataset('meta').table('devices')
+        target_table = bq_client.dataset(env['bigquery']['tbl_devices']['ds_name']
+            ).table(env['bigquery']['tbl_devices']['tbl_name'])
         errors = bq_client.insert_rows_json(
             table=target_table,
             json_rows=rows,
@@ -77,6 +114,9 @@ def addNewDevicesToBigQuery(new_devices:set):
 
 
 def addNewDevices(devices_this_call:set):
+    """
+    Add new devices to our global and BigQuery
+    """
     global logged_devices
 
     # Update our list of (global) logged_devices if necessary
@@ -93,7 +133,7 @@ def addNewDevices(devices_this_call:set):
 
 
 # http://www.eecs.umich.edu/courses/eecs380/HANDOUTS/PROJ2/InsidePoly.html
-def inPoly(p, poly):
+def inPolygon(p, poly):
     """
     NOTE Polygon can't cross Anti-Meridian
     @param p: Point as (Lat, Lon)
@@ -113,111 +153,121 @@ def inPoly(p, poly):
 
 
 def getRegionFromPoint(p):
+    """
+    Search the area_params file to find the region that contains this point
+    """
     
+    # If Lat,Lon both equal 0.0 it didn't report GPS
     if not any(p):
-        return getenv('REGION_BADGPS')
+        return env['bigquery']['tbl_telemetry']['labels']['badgps']
 
-    for info in region_info.values():
-        
-        # Skipped disabled regions
-        if not info['enabled']:
-            continue 
+    for name, info in area_params.items():
 
         # Convert lat/lon bounds to a polygon 
-        poly = [ 
-            (info['lat_hi'], info['lon_hi']), 
-            (info['lat_lo'], info['lon_hi']), 
-            (info['lat_lo'], info['lon_lo']), 
-            (info['lat_hi'], info['lon_lo']) 
-        ]
+        poly = [(p['Latitude'], p['Longitude']) for p in info['Boundingbox']]
 
         # If our point is in the polygon, return the "Label"
-        if inPoly(p, poly):
-            return info['shortname']
+        if inPolygon(p, poly):
+            return name
     
     # Region not found, give it the global label
-    return getenv('REGION_GLOBAL')
+    return env['bigquery']['tbl_telemetry']['labels']['global']
+
+
+def pmIsBad(pm):
+    """
+    Function to determine if pm data is bad. 
+    """
+    return pm >= env['pm_theshold']
 
 
 def main(event, context):
-    # if 'data' in event:
     try:
         entry_info = _insert_into_bigquery(event, context)
+        _handle_success(entry_info)
     except Exception as e:
         _handle_error(event, e)
     
-    _handle_success(entry_info)
+    
 
 
 def _insert_into_bigquery(event, context):
+    """
+    Incoming MQTT packet is in 'event'. Parse the packet,
+    clean it up, run the supplementary functions, then
+    stream the data into BigQuery.
+    """
     data = base64.b64decode(event['data']).decode('utf-8')
     
     deviceId = event['attributes']['deviceId'][1:].upper()
 
-    try:
-        row = json.loads(data)
-    except Exception as e:
-        print(f'len {len(data)}:', data)
-        print('last character:', data[-1])
-        raise e
-     
-    row[getenv("FIELD_ID")] = deviceId
+    row = json.loads(data)
+
+    row[airu_schema['id']] = deviceId
 
     # Uploads from SD card send a timestamp, normal messages may not
-    if getenv("FIELD_TS") not in row:
-        row[getenv("FIELD_TS")] = context.timestamp
+    if airu_schema['ts'] not in row:
+        row[airu_schema['ts']] = context.timestamp
 
     # Replace error codes with None - blank in BigQuery
     for k in row:
         if k in METRIC_ERROR_MAP:
             if row[k] == METRIC_ERROR_MAP[k]:
                 row[k] = None 
-                if k == getenv("FIELD_NOX"):
-                    row[getenv("FIELD_HTR")] = None
+                if k == airu_schema['nox']:
+                    row[airu_schema['htr']] = None
 
-    # Use GPS to get the correct table         
-    region_name = getRegionFromPoint((row[getenv("FIELD_LAT")], row[getenv("FIELD_LON")]))
-
+    # Use GPS to get the correct table
+    region_name = getRegionFromPoint((row[airu_schema['lat']], row[airu_schema['lon']]))
+    row[bq_schema['label']] = region_name
+    
     # Update GPS coordinates (so we aren't storing erroneous 0.0's in database)
-    if not sum([row[getenv("FIELD_LAT")], row[getenv("FIELD_LON")]]):
-        row[getenv("FIELD_GPS")] = None
+    if not any((row[airu_schema['lat']], row[airu_schema['lon']])):
+        row[bq_schema['gps']] = None
     else:
-        geo = geojson.Point((row[getenv('FIELD_LON')], row[getenv('FIELD_LAT')]))
-        row[getenv("FIELD_GPS")] = geojson.dumps(geo)
+        # Lon then lat for geojson Point
+        geo = gjPoint((row[airu_schema['lon']], row[airu_schema['lat']]))
+        row[bq_schema['gps']] = gjdumps(geo)
     
     # Remove Lat/Lon
-    row.pop(getenv('FIELD_LAT'), None)
-    row.pop(getenv('FIELD_LON'), None)
+    row.pop(airu_schema['lat'], None)
+    row.pop(airu_schema['lon'], None)
+    
 
-    row[getenv('FIELD_LABEL')] = region_name
-    row[getenv('FIELD_SRC')] = 'Tetrad'
-
-    # Filter PM: Values above PM_BAD_THRESH are NULL, 
-    #   and store raw PM val in FIELD_PM2_5_Raw for debug
+    # Filter PM:
+    #   If pmIsBad() then move PM2.5 data into PM2_5_Raw, clear PMs, and set flag
     try:
-        if row[getenv('FIELD_PM2')] >= int(getenv('PM_BAD_THRESH')):
-            row[getenv('FIELD_PMRAW')] = row[getenv('FIELD_PM2')]
-            row[getenv('FIELD_PM1')]  = None
-            row[getenv('FIELD_PM2')]  = None
-            row[getenv('FIELD_PM10')] = None
-            row[getenv('FIELD_FLG')] |= 2
+        if pmIsBad(row[airu_schema['pm2_5']]):
+            row[bq_schema['pmraw']] = row[airu_schema['pm2_5']]
+            row[airu_schema['pm1']]   = None
+            row[airu_schema['pm2_5']] = None
+            row[airu_schema['pm10']]  = None
+            row[airu_schema['flags']] |= 2
     except TypeError:
         pass
 
-    # All Tetrad sensors use PMS3003 particle counter
-    row[getenv('FIELD_PMS')] = "PMS3003"
+    # Convert AirU fields to BQ fields
+    for airu_key, bq_key in AIRU_BQ_MAP.items():
+        row[bq_key] = row.pop(airu_key)
+
+    #
+    # Add BigQuery Fields
+    #
+    row[bq_schema['pmsmodel']] = 'PMS3003'
+    row[bq_schema['source']] = 'Tetrad'
 
     # Unique row ID constructed from only timestamp and device id
     # NOTE: Cannot use default hash() function because it is not
     #       consistent across instances, whereas md5 hash is. 
     row_ids = _hash(
         (
-            row[getenv("FIELD_TS")], 
-            row[getenv("FIELD_ID")]
+            row[bq_schema['ts']], 
+            row[bq_schema['id']]
         )
     )
+
     # Add the entry to the appropriate BigQuery Table
-    table = bq_client.dataset(getenv('BQ_DATASET_TELEMETRY')).table(getenv('BQ_TABLE'))
+    table = bq_client.dataset(env['bigquery']['tbl_telemetry']['ds_name']).table(env['bigquery']['tbl_telemetry']['tbl_name'])
     errors = bq_client.insert_rows_json(
         table,
         json_rows=[row],
@@ -228,7 +278,7 @@ def _insert_into_bigquery(event, context):
 
 
     # Add device to meta.devices
-    addNewDevices(set([row[getenv("FIELD_ID")]]))
+    addNewDevices(set([row[bq_schema['id']]]))
 
     return dict(
         device_id=deviceId,
