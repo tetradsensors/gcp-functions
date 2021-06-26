@@ -1,22 +1,68 @@
-from google.cloud.bigquery import Client
+from google.cloud import bigquery, storage
 import json
 import pandas as pd
 import requests
-from os import getenv
+import os
 import datetime
 import geojson
 import numpy as np 
 from matplotlib.path import Path
 from time import sleep
+import yaml
+
+
+gs_client = storage.Client()
+# Download the project environment variables
+env = yaml.load(
+    gs_client.get_bucket(os.getenv('gs_bucket')).get_blob(os.getenv('config')).download_as_string(),
+    Loader=yaml.SafeLoader)
+
+
+def loadBoundingBox(bbox_info):
+        rows = [row for row in bbox_info]
+        bounding_box_vertices = [(index, float(row['Latitude']), float(row['Longitude'])) for row, index in zip(rows, range(len(rows)))]
+        return bounding_box_vertices
+
+
+def buildAreaModelsFromJson(json_data):
+    area_models = {}
+    for key in json_data:
+        this_model = {}
+        this_model['name'] = json_data[key]['Name']
+        this_model['timezone'] = json_data[key]['Timezone']
+        this_model['idstring'] = json_data[key]['ID String']
+        this_model['elevationfile'] = json_data[key]['Elevation File']
+        this_model['note'] = json_data[key]['Note']
+        # this_model['elevationinterpolator'] = buildAreaElevationInterpolator(json_data[key]['Elevation File'])
+        this_model['elevationinterpolator'] = None
+        this_model['boundingbox'] = loadBoundingBox(json_data[key]['Boundingbox'])
+        # this_model['correctionfactors'] = loadCorrectionFactors(json_data[key]['Correction Factors'],json_data[key]['Timezone'])
+        # this_model['lengthscales'] = loadLengthScales(json_data[key]['Length Scales'], json_data[key]['Timezone'])
+        if 'Source table map' in json_data[key]:
+            this_model['sourcetablemap'] = json_data[key]['Source table map']
+        # else:
+        #     this_model['sourcetablemap'] = None
+        area_models[key] = this_model
+    return area_models
+
+
+# Information for all the regions
+_area_params = buildAreaModelsFromJson(
+    json.loads(
+        gs_client.get_bucket(env['storage']['server_bucket']['name']
+        ).get_blob(env['storage']['server_bucket']['files']['area_params']
+        ).download_as_string()))
 
 
 def getAreaModelBounds(area_model):
     area_bounds = area_model['boundingbox']
-    bounds = dict()
-    bounds['lat_hi'] = area_bounds[0][1]
-    bounds['lon_hi'] = area_bounds[1][2]
-    bounds['lat_lo'] = area_bounds[2][1]
-    bounds['lon_lo'] = area_bounds[0][2]
+    bounds = {
+        'lat_hi': area_bounds[0][1],
+        'lon_hi': area_bounds[1][2],
+        'lat_lo': area_bounds[2][1],
+        'lon_lo': area_bounds[3][2]
+    }
+    
     if bounds['lat_hi'] <= bounds['lat_lo'] or bounds['lon_hi'] < bounds['lon_lo']:
         return None
     else:
@@ -52,34 +98,6 @@ def getAreaModelByLocation(area_models, lat=0.0, lon=0.0, string=None):
     return None
 
 
-def loadBoundingBox(bbox_info):
-        rows = [row for row in bbox_info]
-        bounding_box_vertices = [(index, float(row['Latitude']), float(row['Longitude'])) for row, index in zip(rows, range(len(rows)))]
-        return bounding_box_vertices
-
-
-def buildAreaModelsFromJson(json_data):
-    area_models = {}
-    for key in json_data:
-        this_model = {}
-        this_model['shortname'] = json_data[key]['shortname']
-        this_model['timezone'] = json_data[key]['Timezone']
-        this_model['idstring'] = json_data[key]['ID String']
-        this_model['elevationfile'] = json_data[key]['Elevation File']
-        this_model['note'] = json_data[key]['Note']
-        # this_model['elevationinterpolator'] = buildAreaElevationInterpolator(json_data[key]['Elevation File'])
-        this_model['elevationinterpolator'] = None
-        this_model['boundingbox'] = loadBoundingBox(json_data[key]['Boundingbox'])
-        # this_model['correctionfactors'] = loadCorrectionFactors(json_data[key]['Correction Factors'],json_data[key]['Timezone'])
-        # this_model['lengthscales'] = loadLengthScales(json_data[key]['Length Scales'], json_data[key]['Timezone'])
-        if 'Source table map' in json_data[key]:
-            this_model['sourcetablemap'] = json_data[key]['Source table map']
-        # else:
-        #     this_model['sourcetablemap'] = None
-        area_models[key] = this_model
-    return area_models
-
-
 def applyRegionalLabelsToDataFrame(regions_dict, df, null_value=np.nan):
     df['Label'] = null_value
 
@@ -92,9 +110,9 @@ def applyRegionalLabelsToDataFrame(regions_dict, df, null_value=np.nan):
             (df['Lon'] >= bbox['lon_lo']) &
             (df['Lon'] <= bbox['lon_hi']),
             'Label'
-        ] = region_info['shortname']
+        ] = region_info['name']
         
-        print(f"For region {region_name}, applied labels to {len(df[df['Label'] == region_info['shortname']])} rows")
+        print(f"For region {region_name}, applied labels to {len(df[df['Label'] == region_info['name']])} rows")
 
     print(f"Regional labels applied to {len(df[~df['Label'].isnull()])} out of {len(df)} rows. ({int(100 * (len(df[~df['Label'].isnull()]) / len(df)))})")
     return df
@@ -148,9 +166,9 @@ def getParentChildPairing(df):
 
 def main(data, context):
 
-    with open('area_params.json') as json_file:
-        json_temp = json.load(json_file)
-    _area_models = buildAreaModelsFromJson(json_temp)
+    # with open('area_params.json') as json_file:
+    #     json_temp = json.load(json_file)
+    # _area_models = buildAreaModelsFromJson(json_temp)
 
     response = None
     try:
@@ -228,16 +246,16 @@ def main(data, context):
     df = df.dropna(subset=['Lat', 'Lon'])               # Remove sensors with no lat/lon info
 
     # Apply regional labels ('slc_ut', 'chatt_tn', etc.)
-    df = applyRegionalLabelsToDataFrame(_area_models, df)
+    df = applyRegionalLabelsToDataFrame(_area_params, df)
 
     # Create the GPS column
     df['GPS'] = df.apply(lambda x: geojson.dumps(geojson.Point((x['Lon'], x['Lat']))), axis=1)
 
     # Move bad PM data out of cleaned column
-    df['PM2_5_Raw'] = df.loc[df['PM2_5Value'] >= float(getenv('PM_BAD_THRESH')), 'PM2_5Value']
+    df['PM2_5_Raw'] = df.loc[df['PM2_5Value'] >= float(env['pm_threshold']), 'PM2_5Value']
     df['Flags'] = 0
-    df.loc[df['PM2_5Value'] >= float(getenv('PM_BAD_THRESH')), 'Flags'] |= 2
-    df.loc[df['PM2_5Value'] >= float(getenv('PM_BAD_THRESH')), 'PM2_5Value'] = np.nan
+    df.loc[df['PM2_5Value'] >= float(env['pm_threshold']), 'Flags'] |= 2
+    df.loc[df['PM2_5Value'] >= float(env['pm_threshold']), 'PM2_5Value'] = np.nan
 
     # Convert temperature F to C
     df['temp_f'] = (df['temp_f'] - 32) * (5. / 9)
@@ -274,15 +292,15 @@ def main(data, context):
     data = df.to_dict('records')
 
     # Create unique row_ids to avoid duplicates when inserting overlapping data
-    row_ids = pd.util.hash_pandas_object(df).values.astype(str)
+    row_ids = pd.util.hash_pandas_object(df[['Timestamp', 'DeviceID']]).values.astype(str)
 
-    client = Client()
-    target_table = client.dataset(getenv("BQ_DATASET")).table(getenv("BQ_TABLE"))
+    bq_client = bigquery.Client()
+    target_table = bq_client.dataset(env['bigquery']['tbl_telemetry']['ds_name']).table(env['bigquery']['tbl_telemetry']['tbl_name'])
     
     # Maximum upload size for BigQuery API is 10,000 rows, so we have to upload the data in chunks
     for i, (data_chunk, rows_chunk) in enumerate(zip(chunk_list(data, chunk_size=10000), chunk_list(row_ids, chunk_size=10000))):
         print(f'Sending chunk {i + 1}...')
-        errors = client.insert_rows_json(
+        errors = bq_client.insert_rows_json(
             table=target_table,
             json_rows=data_chunk,
             row_ids=rows_chunk
@@ -297,7 +315,7 @@ if __name__ == '__main__':
     
     # This only runs locally
     import os
-    os.environ['BQ_TABLE'] = "telemetry"
-    os.environ['BQ_DATASET'] = "dev"
+    env['bigquery']['tbl_telemetry']['ds_name']  = "dev"
+    env['bigquery']['tbl_telemetry']['tbl_name'] = "dev"
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../global/tetrad.json'
     main('data', 'context')

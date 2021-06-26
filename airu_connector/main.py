@@ -30,7 +30,6 @@ area_params = json.loads(
     ).get_blob(env['storage']['server_bucket']['files']['area_params']
     ).download_as_string())
 
-env['storage']['server_bucket']['files']['area_params']
 # List of all the devices that have responded. Reloaded from BigQuery after new deployment
 logged_devices = set()
 
@@ -178,7 +177,7 @@ def pmIsBad(pm):
     """
     Function to determine if pm data is bad. 
     """
-    return pm >= env['pm_theshold']
+    return pm >= env['pm_threshold']
 
 
 def main(event, context):
