@@ -185,5 +185,39 @@
 		{"starttime":"default","endtime":"default","slope":0.52356,"intercept":1.5707,"note":"Correction: EPA default"}
 	    ]
 	}
+    },
+	"Pioneer_Valley":
+    {
+		"shortname":"pv_ma",
+		"Note": "Pioneer Valley, Massachusetts",
+		"Timezone": "America/New_York",
+		"ID String":["TETRAD_TABLE_ID"],
+		"Elevation File":"PioneerValley_elevations.mat",
+		"Boundingbox": [
+			{"Description": "UL", "Latitude": 42.2406, "Longitude": -72.6644},
+			{"Description": "UR", "Latitude": 42.2406, "Longitude": -72.4680}, 
+			{"Description": "LR", "Latitude": 42.0614, "Longitude": -72.4680}, 
+			{"Description": "LL", "Latitude": 42.0614, "Longitude": -72.6644}
+		],
+		"Length Scales":[
+			{
+			"starttime": "default", "endtime": "default","Space": 4300, "Elevation":30, "Time": 0.25
+			}
+		],
+		"Correction Factors":
+		{
+			"PMS5003":
+			[
+			{"starttime":"default","endtime":"default","slope":0.52356,"intercept":1.5707,"note":"Correction: EPA default for PMS5003"}
+			],
+			"PMS3003":
+			[
+			{"starttime":"default","endtime":"default","slope":0.52356,"intercept":1.5707,"note":"Correction: EPA default for PMS3003"}
+			],
+			"default":
+			[
+			{"starttime":"default","endtime":"default","slope":0.52356,"intercept":1.5707,"note":"Correction: EPA default for unknown sensor type"}
+			]
+		}
     }
 }

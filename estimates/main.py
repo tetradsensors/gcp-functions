@@ -21,7 +21,7 @@ LON_SIZE = LAT_SIZE
 # Load in .env and set the table name
 # load_dotenv()  # Required for compatibility with GCP, can't use pipenv there
 
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
 os.environ['TELEMETRY_TABLE_ID'] = 'telemetry.telemetry'
 bq_client = bigquery.Client()
 fs_client = firestore.Client()
@@ -535,7 +535,7 @@ def format_obj(areaModel, d):
 
 def main(data, context):
     
-    for area_string in ['Cleveland', 'Kansas_City', 'Chattanooga']:
+    for area_string in ['Cleveland', 'Kansas_City', 'Chattanooga', 'Salt_Lake_City', 'Pioneer_Valley']:
         print(area_string)
         time = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:00Z')
 
