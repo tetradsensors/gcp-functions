@@ -204,10 +204,10 @@ def interpolateBadElements(matrix, bad_value = 0):
                 distance = curValueIndex - prevValueIndex
                 if (distance < SENSOR_INTERPOLATE_DISTANCE):            
                     row[prevValueIndex+1: curValueIndex+1] = row[prevValueIndex]
-            else:
-                print("got full row of bad indices?" + str(row))
-        if (float(num_interp_fails)/matrix.shape[0]) > FRACTION_SIGNIFICANT_FAILS:
-            print("got %d interp failures out of %d sensors", num_interp_fails, matrix.shape[0])
+            # else:
+            #     print("got full row of bad indices?" + str(row))
+        # if (float(num_interp_fails)/matrix.shape[0]) > FRACTION_SIGNIFICANT_FAILS:
+        #     print("got %d interp failures out of %d sensors", num_interp_fails, matrix.shape[0])
             # saveMatrixToFile(matrix, 'failed_interp_matrix.txt')            
                 
         
@@ -241,11 +241,11 @@ def trimBadEdgeElements(matrix, time_coordinates, bad_value=-1):
 def removeBadSensors(data_matrix, space_coordinates, ratio):
     toKeep = [(numpy.count_nonzero(row != -1.0) / len(row)) > ratio for row in data_matrix]
     fraction_removed = (1.0 - float(numpy.sum(toKeep))/float(data_matrix.shape[0]))
-    if (fraction_removed > FRACTION_SIGNIFICANT_FAILS):
-        print(f"Removed {100.0*fraction_removed} percent of sensors due to insufficient measurements")
-        print(f"time slices in remove data to keep: {toKeep}")
-    else:
-        print(f"Removed {100.0*fraction_removed} percent of sensors due to insufficient measurements")
+    # if (fraction_removed > FRACTION_SIGNIFICANT_FAILS):
+    #     print(f"Removed {100.0*fraction_removed} percent of sensors due to insufficient measurements")
+    #     print(f"time slices in remove data to keep: {toKeep}")
+    # else:
+    #     print(f"Removed {100.0*fraction_removed} percent of sensors due to insufficient measurements")
     data_matrix = data_matrix[toKeep]
     space_coordinates = space_coordinates[toKeep]
     return data_matrix, space_coordinates
@@ -357,8 +357,8 @@ def setupDataMatrix2(sensor_data, space_coordinates, time_coordinates, device_lo
 def fillInMissingReadings(data_matrix, bad_value = 0.):
     data_mask = (data_matrix != bad_value)
     data_counts = numpy.sum(data_mask, 0)
-    if (float(numpy.min(data_counts))/float(data_matrix.shape[0]) < TIME_SLICE_MIN_SENSOR_RATE):
-        print("WARNING: got time slice with too few data sensor values with value " + str(float(numpy.min(data_counts))/float(data_matrix.shape[0])) + " and index "  + str(numpy.nonzero((data_counts/data_matrix.shape[0]) < 0.75)))
+    # if (float(numpy.min(data_counts))/float(data_matrix.shape[0]) < TIME_SLICE_MIN_SENSOR_RATE):
+    #     print("WARNING: got time slice with too few data sensor values with value " + str(float(numpy.min(data_counts))/float(data_matrix.shape[0])) + " and index "  + str(numpy.nonzero((data_counts/data_matrix.shape[0]) < 0.75)))
     sum_tmp = numpy.sum(numpy.multiply(data_matrix,data_mask), 0)
     time_averages = numpy.divide(sum_tmp, data_counts, out=numpy.zeros_like(sum_tmp), where=(data_counts!=0))
     for idx in numpy.ndindex(data_matrix.shape):
@@ -419,11 +419,11 @@ def createModel(sensor_data, latlon_length_scale, elevation_length_scale, time_l
         model = None
         status = "0 measurements"
         
-    if save_matrices:
+    # if save_matrices:
         # numpy.savetxt('space_coords.csv', space_coordinates, delimiter=',')
         # numpy.savetxt('time_coords.csv', time_coordinates, delimiter=',')
-        print("about to save matrix - shape " + str(data_matrix.shape))
-        print("about to save matrix - max " + str(torch.max(data_matrix)))
+        # print("about to save matrix - shape " + str(data_matrix.shape))
+        # print("about to save matrix - max " + str(torch.max(data_matrix)))
         
         # numpy.savetxt('PM_data.csv', data_matrix, delimiter=',')
         # numpy.savetxt('latlon_scale.csv', numpy.full([1], latlon_length_scale), delimiter=',')
@@ -476,8 +476,8 @@ def estimateUsingModel(model, lats, lons, elevations, query_dates, time_offset, 
     yPred, yVar, status = model(query_space, query_time)
     yPred = numpy.maximum(yPred.numpy(), 0.0)
     yVar = yVar.numpy()
-    if numpy.amin(yVar) < 0.0:
-        print("Got negative values in variance, suggesting a numerical problem")
+    # if numpy.amin(yVar) < 0.0:
+    #     print("Got negative values in variance, suggesting a numerical problem")
 
     return yPred, yVar, status
 

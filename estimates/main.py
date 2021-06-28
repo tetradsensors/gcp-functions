@@ -92,8 +92,6 @@ def estimateMedianDeviation(start_date, end_date, lat_lo, lat_hi, lon_lo, lon_hi
 
     full_query = f"WITH all_data as {query} SELECT * FROM (SELECT PERCENTILE_DISC(pm2_5, 0.5) OVER() AS median FROM all_data LIMIT 1) JOIN (SELECT COUNT(DISTINCT id) as num_sensors FROM all_data) ON TRUE"
 
-    print("query is: " + full_query)
-
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("start_date", "TIMESTAMP", start_date),
@@ -206,15 +204,11 @@ def getEstimateMap(areaModel, time, latSize, lonSize):
     # build the grid of query locations
     if not UTM:
         lon_vector, lat_vector = utils.interpolateQueryLocations(lat_lo, lat_hi, lon_lo, lon_hi, lat_res, lon_res)
-        print('lon_vector:', lon_vector)
-        print()
-        print('lat_vector:', lat_vector)
     else:
         return 'UTM not yet supported', 400
 
     area_model['elevationinterpolator'] = jsonutils.buildAreaElevationInterpolator(area_model['elevationfile'])
     elevations = area_model['elevationinterpolator'](lon_vector, lat_vector)
-    print(elevations.shape)
     locations_lon, locations_lat = np.meshgrid(lon_vector, lat_vector)
     query_lats = locations_lat.flatten()
     query_lons= locations_lon.flatten()
@@ -238,8 +232,7 @@ def getEstimateMap(areaModel, time, latSize, lonSize):
         return "error", 400
 
     yPred, yVar, status = computeEstimatesForLocations(query_dates, query_locations, query_elevations, area_model)
-    
-    print(yPred.shape)
+
     num_times = len(query_dates)
 
     elevations = (elevations).tolist()
@@ -301,8 +294,6 @@ def submit_sensor_query(lat_lo, lat_hi, lon_lo, lon_hi, start_date, end_date, ar
 
     query = " UNION ALL ".join(query_list) + " ORDER BY time ASC "
 
-    print("query is: " + query)
-
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("start_date", "TIMESTAMP", start_date),
@@ -349,7 +340,6 @@ def request_model_data_local(lats, lons, radius, start_date, end_date, area_mode
                 lat_lo, lat_hi, lon_lo, lon_hi = utils.boundingBoxUnion((utils.latlonBoundingBox(lats[i], lons[i], radius)), (lat_lo, lat_hi, lon_lo, lon_hi))
     else:
         return "lats,lons data structure misalignment in request sensor data", 400
-    print("Query bounding box is %f %f %f %f" %(lat_lo, lat_hi, lon_lo, lon_hi))
 
     if outlier_filtering:
         min_value, max_value = filterUpperLowerBounds(lat_lo, lat_hi, lon_lo, lon_hi, start_date, end_date, area_model)
@@ -395,10 +385,6 @@ def computeEstimatesForLocations(query_dates, query_locations, query_elevations,
     if latlon_length_scale == None:
             print("No length scale found between dates {query_start_datetime} and {query_end_datetime}")
             return np.full((query_lats.shape[0], query_dates.shape[0]), 0.0), np.full((query_lats.shape[0], query_dates.shape[0]), np.nan), ["Length scale parameter error" for i in range(query_dates.shape[0])]
-    print("Loaded length scales: space=" + str(latlon_length_scale) + " time=" + str(time_length_scale) + " elevation=" + str(elevation_length_scale))
-
-
-    print(f'Using length scales: latlon={latlon_length_scale} elevation={elevation_length_scale} time={time_length_scale}')
 
     # step 3, query relevent data
 
@@ -423,10 +409,6 @@ def computeEstimatesForLocations(query_dates, query_locations, query_elevations,
         return np.full((query_lats.shape[0], query_dates.shape[0]), 0.0), np.full((query_lats.shape[0], query_dates.shape[0]), np.nan), ["Failure to convert lat/lon" for i in range(query_dates.shape[0])]
 
     unique_sensors = {datum['ID'] for datum in sensor_data}
-    print((
-    #        "After removing points with zone num != 12: "
-        "got " f"{len(sensor_data)} data points for {len(unique_sensors)} unique devices."
-    ))
 
     # Step 4, parse sensor type from the version
     #    sensor_source_to_type = {'AirU': '3003', 'PurpleAir': '5003', 'DAQ': '0000', 'Default':'Default'}
@@ -435,7 +417,8 @@ def computeEstimatesForLocations(query_dates, query_locations, query_elevations,
     #        datum['type'] =  sensor_source_to_type[datum['SensorSource']]
 
     if len(sensor_data) > 0:
-        print(f'Fields: {sensor_data[0].keys()}')
+        # print(f'Fields: {sensor_data[0].keys()}')
+        pass
     else:
         print(f'Got zero sensor data')
         return np.full((query_lats.shape[0], query_dates.shape[0]), 0.0), np.full((query_lats.shape[0], query_dates.shape[0]), np.nan), ["Zero sensor data" for i in range(query_dates.shape[0])]

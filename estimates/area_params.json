@@ -191,7 +191,7 @@
 		"shortname":"pv_ma",
 		"Note": "Pioneer Valley, Massachusetts",
 		"Timezone": "America/New_York",
-		"ID String":["TETRAD_TABLE_ID"],
+		"ID String":["TELEMETRY_TABLE_ID"],
 		"Elevation File":"PioneerValley_elevations.mat",
 		"Boundingbox": [
 			{"Description": "UL", "Latitude": 42.2406, "Longitude": -72.6644},
