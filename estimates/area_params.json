@@ -8,10 +8,10 @@
 	"Source table map":{"AirU": ["TELEMETRY_TABLE_ID"], "PurpleAir": ["TELEMETRY_TABLE_ID"], "DAQ": ["TELEMETRY_TABLE_ID"]},
 	"Elevation File":"SLC_elevations.mat",
 	"Boundingbox": [
-	    {"Description": "UL", "Latitude": 41.20, "Longitude":-112.10},
-	    {"Description": "UR", "Latitude": 41.20,"Longitude": -111.63},
-	    {"Description": "LR", "Latitude": 39.2,"Longitude": -111.63},
-	    {"Description": "LL", "Latitude": 39.2,"Longitude": -112.10}
+	    {"Description": "UL", "Latitude": 41.2000, "Longitude":-112.1595},
+	    {"Description": "UR", "Latitude": 41.2000,"Longitude": -111.6300},
+	    {"Description": "LR", "Latitude": 39.2000,"Longitude": -111.6300},
+	    {"Description": "LL", "Latitude": 39.2000,"Longitude": -112.1595}
 	],
 	"Length Scales":[
 	    {
