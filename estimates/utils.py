@@ -249,12 +249,15 @@ def interpolateQueryDates(start_datetime, end_datetime, period):
     # return np.meshgrid(E_range, N_range)
 
 # build a grid of coordinates that will consistute the "map"  - used for getEstimateMap() in the api
-def interpolateQueryLocations(lat_lo, lat_hi, lon_lo, lon_hi, lat_res, lon_res): 
+def interpolateQueryLocations(lat_lo, lat_hi, lon_lo, lon_hi, lat_size, lon_size, lat_res=None, lon_res=None): 
 #    lat_step = (lat_hi-lat_low)/float(lat_size)
 #    lon_step = (lon_hi-lon_low)/float(lon_size)
-    lat_range = np.arange(lon_lo, lon_hi, lon_res)
-    lon_range = np.arange(lat_lo, lat_hi, lat_res)
-    return lat_range, lon_range
+    # lon_range = np.arange(lon_lo, lon_hi, lon_res)
+    # lat_range = np.arange(lat_lo, lat_hi, lat_res)
+    lat_range = np.linspace(lat_lo, lat_hi, num=lat_size, endpoint=True)
+    lon_range = np.linspace(lon_lo, lon_hi, num=lon_size, endpoint=True)
+
+    return lon_range, lat_range
 #    return np.meshgrid(lat_range, lon_range)
 
 

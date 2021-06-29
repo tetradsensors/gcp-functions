@@ -134,6 +134,7 @@ def filterUpperLowerBounds(lat_lo, lat_hi, lon_lo, lon_hi, start_date, end_date,
 
 def getEstimateMap(areaModel, time, latSize, lonSize):
 
+    print(f'lat: {latSize}, lon: {lonSize}')
     # this species grid positions should be interpolated in UTM coordinates
     # right now (Nov 2020) this is not supported.
     # might be used later in order to build grids of data in UTM coordinates -- this would depend on what the display/visualization code needs
@@ -203,9 +204,12 @@ def getEstimateMap(areaModel, time, latSize, lonSize):
     
     # build the grid of query locations
     if not UTM:
-        lon_vector, lat_vector = utils.interpolateQueryLocations(lat_lo, lat_hi, lon_lo, lon_hi, lat_res, lon_res)
+        # lon_vector, lat_vector = utils.interpolateQueryLocations(lat_lo, lat_hi, lon_lo, lon_hi, lat_res, lon_res)
+        lon_vector, lat_vector = utils.interpolateQueryLocations(lat_lo, lat_hi, lon_lo, lon_hi, lat_size, lon_size, lat_res=lat_res, lon_res=lon_res)
     else:
         return 'UTM not yet supported', 400
+
+    print(f'lat_vector: {lat_vector.shape}, lon_vector: {lon_vector.shape}')
 
     area_model['elevationinterpolator'] = jsonutils.buildAreaElevationInterpolator(area_model['elevationfile'])
     elevations = area_model['elevationinterpolator'](lon_vector, lat_vector)
@@ -379,7 +383,11 @@ def computeEstimatesForLocations(query_dates, query_locations, query_elevations,
     query_start_datetime = query_dates[0]
     query_end_datetime = query_dates[-1]
 
+    print('num_locations:', num_locations)
+
     # step 2, load up length scales from file
+
+    print(f'computeEstimatesForLocation() query_lats: {query_lats.shape}, query_lons: {query_lons.shape}')
 
     latlon_length_scale, time_length_scale, elevation_length_scale = jsonutils.getLengthScalesForTime(area_model['lengthscales'], query_start_datetime)
     if latlon_length_scale == None:
@@ -519,7 +527,9 @@ def format_obj(areaModel, d):
 def main(data, context):
     
     for area_string in ['Cleveland', 'Kansas_City', 'Chattanooga', 'Salt_Lake_City', 'Pioneer_Valley']:
+        
         print(area_string)
+        
         time = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:00Z')
 
         areaModel = jsonutils.getAreaModelByLocation(_area_models, string=area_string)
@@ -537,14 +547,8 @@ def main(data, context):
 
 
 if __name__ == '__main__':
-    # main('data', 'context')
+    main('data', 'context')
     
-    areaModel = jsonutils.getAreaModelByLocation(_area_models, string='Chattanooga')
-
-    estimate_obj = getEstimateMap(areaModel, '2021-06-19T05:00:00Z', latSize=100, lonSize=100)
-    from matplotlib import pyplot as plt 
-    plt.imshow(estimate_obj['estimates'][0]['PM2_5'], origin='lower')
-    plt.show()
     # import json
     # with open('/Users/tombo/Downloads/gcp_estimates_chatt_2021-06-19.json', 'w') as handle:
     #     json.dump(estimate_obj, handle)
