@@ -15,13 +15,13 @@ from timezonefinder import TimezoneFinder
 # import psutil
 # p = psutil.Process()
 
-LAT_SIZE = 3
+LAT_SIZE = 100
 LON_SIZE = LAT_SIZE
 
 # Load in .env and set the table name
 # load_dotenv()  # Required for compatibility with GCP, can't use pipenv there
 
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
 os.environ['TELEMETRY_TABLE_ID'] = 'telemetry.telemetry'
 bq_client = bigquery.Client()
 fs_client = firestore.Client()
@@ -153,7 +153,7 @@ def liveSensors(area_model):
     sensor_data = [dict(r) for r in result]
 
     for datum in sensor_data:
-        datum['PM2_5'] = jsonutils.applyCorrectionFactor(area_model['correctionfactors'], datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), datum['PM2_5'], datum['SensorModel'])
+        datum['PM2_5'] = jsonutils.applyCorrectionFactor(area_model['correctionfactors'], datetime.datetime.utcnow(), datum['PM2_5'], datum['SensorModel'])
 
     return sensor_data 
 
@@ -556,8 +556,7 @@ def format_obj(areaModel, d):
 
 def main(data, context):
     
-    # for area_string in ['Cleveland', 'Kansas_City', 'Chattanooga', 'Salt_Lake_City', 'Pioneer_Valley']:
-    for area_string in ['Salt_Lake_City']:
+    for area_string in ['Cleveland', 'Kansas_City', 'Chattanooga', 'Salt_Lake_City', 'Pioneer_Valley']:
         
         print(area_string)
         
@@ -569,7 +568,7 @@ def main(data, context):
 
         # Add to Firestore
         obj = format_obj(areaModel, estimate_obj)
-        collection = fs_client.collection('estimateMapsDev')
+        collection = fs_client.collection('estimateMaps')
         doc_name = f'{obj["shortname"]}_{obj["date"]}'
         collection.document(doc_name).set(obj)
         print(f'saved to {doc_name}')

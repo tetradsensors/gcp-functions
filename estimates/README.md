@@ -8,9 +8,9 @@ Here are the gcloud commands used to deploy the Function and Scheduler job:
 
 Deploy Scheduler Job:
 ```bash
-gcloud scheduler jobs create pubsub estimates_dev --schedule "*/2 * * * *" --topic trigger_estimates_dev --message-body " "
+gcloud scheduler jobs create pubsub estimates --schedule "*/15 * * * *" --topic trigger_estimates --message-body " "
 ```
 Deploy Function:
 ```bash
-gcloud functions deploy estimates_dev --entry-point main --runtime python38 --trigger-resource trigger_estimates_dev --trigger-event google.pubsub.topic.publish --timeout 540s --memory 4096
+gcloud functions deploy estimates --entry-point main --runtime python38 --trigger-resource trigger_estimates --trigger-event google.pubsub.topic.publish --timeout 540s --memory 4096
 ```
