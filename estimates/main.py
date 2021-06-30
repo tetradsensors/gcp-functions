@@ -15,13 +15,13 @@ from timezonefinder import TimezoneFinder
 # import psutil
 # p = psutil.Process()
 
-LAT_SIZE = 100
+LAT_SIZE = 3
 LON_SIZE = LAT_SIZE
 
 # Load in .env and set the table name
 # load_dotenv()  # Required for compatibility with GCP, can't use pipenv there
 
-# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
 os.environ['TELEMETRY_TABLE_ID'] = 'telemetry.telemetry'
 bq_client = bigquery.Client()
 fs_client = firestore.Client()
@@ -130,6 +130,32 @@ def filterUpperLowerBounds(lat_lo, lat_hi, lon_lo, lon_hi, start_date, end_date,
         lo = max(median - filter_level*MAD, 0.0)
         hi = min(max(median + filter_level*MAD, MIN_OUTLIER_LEVEL), MAX_ALLOWED_PM2_5)
         return lo, hi
+
+
+def liveSensors(area_model):
+    q = f"""
+    SELECT 
+        DeviceID, Source, PMSModel AS SensorModel,
+        AVG(PM2_5) AS PM2_5,
+        AVG(ST_X(GPS)) AS Longitude,
+        AVG(ST_Y(GPS)) AS Latitude
+    FROM
+        `telemetry.telemetry`
+    WHERE
+        Timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 MINUTE)
+        AND
+        (Label = "{area_model['shortname']}" OR Label = "global")
+    GROUP BY
+        DeviceID, Source, PMSModel
+    """
+    job = bq_client.query(query=q)
+    result = job.result()
+    sensor_data = [dict(r) for r in result]
+
+    for datum in sensor_data:
+        datum['PM2_5'] = jsonutils.applyCorrectionFactor(area_model['correctionfactors'], datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), datum['PM2_5'], datum['SensorModel'])
+
+    return sensor_data 
 
 
 def getEstimateMap(areaModel, time, latSize, lonSize):
@@ -498,13 +524,17 @@ def reformat_2dlist(list2d):
 
 
 def format_obj(areaModel, d):
+    
+    sensor_data = liveSensors(areaModel)
+
     estimates = d['estimates'][0]
     data = {
         'PM2.5': reformat_2dlist(estimates['PM2_5']),
         'PM2.5 variance': reformat_2dlist(estimates['variance']),
         'Elevations': reformat_2dlist(d['Elevations']),
         'Latitudes': d['Latitudes'],
-        'Longitudes': d['Longitudes']
+        'Longitudes': d['Longitudes'],
+        'sensor_data': sensor_data
     }
     
     final = {
@@ -526,7 +556,8 @@ def format_obj(areaModel, d):
 
 def main(data, context):
     
-    for area_string in ['Cleveland', 'Kansas_City', 'Chattanooga', 'Salt_Lake_City', 'Pioneer_Valley']:
+    # for area_string in ['Cleveland', 'Kansas_City', 'Chattanooga', 'Salt_Lake_City', 'Pioneer_Valley']:
+    for area_string in ['Salt_Lake_City']:
         
         print(area_string)
         
@@ -538,7 +569,7 @@ def main(data, context):
 
         # Add to Firestore
         obj = format_obj(areaModel, estimate_obj)
-        collection = fs_client.collection('estimateMaps')
+        collection = fs_client.collection('estimateMapsDev')
         doc_name = f'{obj["shortname"]}_{obj["date"]}'
         collection.document(doc_name).set(obj)
         print(f'saved to {doc_name}')
