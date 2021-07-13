@@ -7,6 +7,7 @@ import utils, jsonutils, gaussian_model_utils
 from google.cloud import bigquery, firestore
 # from tetrad import _area_models
 # from dotenv import load_dotenv
+from scipy.stats.qmc import Halton
 
 import numpy as np
 # Find timezone based on longitude and latitude
@@ -15,18 +16,13 @@ from timezonefinder import TimezoneFinder
 # import psutil
 # p = psutil.Process()
 
-DEBUG = True
-
 LAT_SIZE = 100
 LON_SIZE = LAT_SIZE
 
 # Load in .env and set the table name
 # load_dotenv()  # Required for compatibility with GCP, can't use pipenv there
 
-if DEBUG:
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
-    from matplotlib import pyplot as plt 
-
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/tombo/Tetrad/global/tetrad.json'
 os.environ['TELEMETRY_TABLE_ID'] = 'telemetry.telemetry'
 bq_client = bigquery.Client()
 fs_client = firestore.Client()
@@ -137,58 +133,30 @@ def filterUpperLowerBounds(lat_lo, lat_hi, lon_lo, lon_hi, start_date, end_date,
         return lo, hi
 
 
-# def liveSensors(area_model):
-#     q = f"""
-#     SELECT 
-#         DeviceID, Source, PMSModel AS SensorModel,
-#         AVG(PM2_5) AS PM2_5,
-#         AVG(ST_X(GPS)) AS Longitude,
-#         AVG(ST_Y(GPS)) AS Latitude
-#     FROM
-#         `telemetry.telemetry`
-#     WHERE
-#         Timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 MINUTE)
-#         AND
-#         (Label = "{area_model['shortname']}" OR Label = "global")
-#     GROUP BY
-#         DeviceID, Source, PMSModel
-#     """
-#     job = bq_client.query(query=q)
-#     result = job.result()
-#     sensor_data = [dict(r) for r in result]
+def liveSensors(area_model):
+    q = f"""
+    SELECT 
+        DeviceID, Source, PMSModel AS SensorModel,
+        AVG(PM2_5) AS PM2_5,
+        AVG(ST_X(GPS)) AS Longitude,
+        AVG(ST_Y(GPS)) AS Latitude
+    FROM
+        `telemetry.telemetry`
+    WHERE
+        Timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 MINUTE)
+        AND
+        (Label = "{area_model['shortname']}" OR Label = "global")
+    GROUP BY
+        DeviceID, Source, PMSModel
+    """
+    job = bq_client.query(query=q)
+    result = job.result()
+    sensor_data = [dict(r) for r in result]
 
-#     for datum in sensor_data:
-#         datum['PM2_5'] = jsonutils.applyCorrectionFactor(area_model['correctionfactors'], datetime.datetime.utcnow(), datum['PM2_5'], datum['SensorModel'])
+    for datum in sensor_data:
+        datum['PM2_5'] = jsonutils.applyCorrectionFactor(area_model['correctionfactors'], datetime.datetime.utcnow(), datum['PM2_5'], datum['SensorModel'])
 
-#     return sensor_data 
-
-def latestFromSensors(sensor_data):
-
-    data_id_grp = dict()
-    for row in sensor_data:
-        if row['ID'] not in data_id_grp.keys():
-            data_id_grp[row['ID']] = {}
-            data_id_grp[row['ID']]['PM2_5'] = []
-            data_id_grp[row['ID']]['Latitude'] = row['Latitude']
-            data_id_grp[row['ID']]['Longitude'] = row['Longitude']
-            data_id_grp[row['ID']]['Source'] = 'PurpleAir' if row['ID'].startswith('PP') else 'Tetrad'
-        data_id_grp[row['ID']]['PM2_5'].append(row['PM2_5'])
-
-    latest = []
-    weights = 1 / (1 + np.exp(-1 * np.linspace(-10, 10, 50)))
-    for id, data in data_id_grp.items():
-        
-        if len(data['PM2_5']) > len(weights):
-            w = 1 / (1 + np.exp(-1 * np.linspace(-10, 10, len(data['PM2_5']))))
-        else:
-            w = weights[-len(data['PM2_5']):]
-
-        datum = data.copy()
-        datum['DeviceID'] = id 
-        datum['PM2_5'] = np.average(data['PM2_5'], weights=w)
-        latest.append(datum)
-
-    return latest
+    return sensor_data 
 
 
 def getEstimateMap(areaModel, time, latSize, lonSize):
@@ -294,9 +262,7 @@ def getEstimateMap(areaModel, time, latSize, lonSize):
         # query_dates = utils.interpolateQueryDates(query_start_datetime, query_end_datetime, query_rate)     
         return "error", 400
 
-    yPred, yVar, status, sensor_data = computeEstimatesForLocations(query_dates, query_locations, query_elevations, area_model)
-
-    latest_avgs = latestFromSensors(sensor_data)
+    yPred, yVar, status = computeEstimatesForLocations(query_dates, query_locations, query_elevations, area_model)
 
     num_times = len(query_dates)
 
@@ -319,25 +285,21 @@ def getEstimateMap(areaModel, time, latSize, lonSize):
                 'PM2_5': (yPred[:,:,i]).tolist(), 
                 'variance': (yVar[:,:,i]).tolist(), 
                 'datetime': query_dates[i].strftime('%Y-%m-%d %H:%M:%S%z'), 
-                'Status': status[i],
-                'sensor_data': latest_avgs
+                'Status': status[i]
             }
         )
-        
-        
-        # ys = (yPred[:,:,i]).tolist()
-        # for i,v in enumerate(ys):
-        #     print(i, np.array(v).round(decimals=1))
-        
-        # plt.figure()
-        # plt.imshow(ys, origin='lower', vmin=0, vmax=30)
-        # plt.colorbar()
-        # plt.show()
-        
 
     return_object['estimates'] = estimates
-
     return return_object
+
+
+def TEST_submit_sensor_query(lat_lo, lat_hi, lon_lo, lon_hi, start_date, end_date, area_id_strings, min_value, max_value):
+    num_sensors = 30
+    sensor_lats = np.random.uniform(lat_lo, lat_hi, (num_sensors,))
+    sensor_lons = np.random.uniform(lon_lo, lon_hi, (num_sensors,))
+    y1 = np.ones((num_sensors,))
+    y0 = y1 * 0
+    y2 = y1 * 10
 
 
 # submit a query for a range of values
@@ -553,7 +515,7 @@ def computeEstimatesForLocations(query_dates, query_locations, query_elevations,
     # Here we clamp values to ensure that small negative values to do not appear
     yPred = np.clip(yPred, a_min = 0., a_max = None)
 
-    return yPred, yVar, status, sensor_data
+    return yPred, yVar, status
 
 
 def removeOldDocuments():
@@ -573,7 +535,7 @@ def reformat_2dlist(list2d):
 
 def format_obj(areaModel, d):
     
-    # sensor_data = liveSensors(areaModel)
+    sensor_data = liveSensors(areaModel)
 
     estimates = d['estimates'][0]
     data = {
@@ -582,7 +544,7 @@ def format_obj(areaModel, d):
         'Elevations': reformat_2dlist(d['Elevations']),
         'Latitudes': d['Latitudes'],
         'Longitudes': d['Longitudes'],
-        'sensor_data': estimates['sensor_data']
+        'sensor_data': sensor_data
     }
     
     final = {
@@ -601,15 +563,14 @@ def format_obj(areaModel, d):
     return final
 
 
+
 def main(data, context):
     
     for area_string in ['Cleveland', 'Kansas_City', 'Chattanooga', 'Salt_Lake_City', 'Pioneer_Valley']:
         
-        if area_string != 'Salt_Lake_City': continue
         print(area_string)
         
         time = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:00Z')
-        time = '2021-07-07T15:45:00Z'
 
         areaModel = jsonutils.getAreaModelByLocation(_area_models, string=area_string)
 
@@ -617,13 +578,12 @@ def main(data, context):
 
         # Add to Firestore
         obj = format_obj(areaModel, estimate_obj)
-
-        collection = fs_client.collection('test')
+        collection = fs_client.collection('estimateMaps')
         doc_name = f'{obj["shortname"]}_{obj["date"]}'
         collection.document(doc_name).set(obj)
         print(f'saved to {doc_name}')
 
-    # removeOldDocuments()
+    removeOldDocuments()
 
 
 if __name__ == '__main__':
